@@ -1,156 +1,92 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
+import { LESSONS, LESSON_IDS } from './data/grammar'
 import { WORDS } from './data/words'
-import { buildOptions } from './logic/options'
-import { pickNext } from './logic/pick'
-import { canSpeak, speak, warmUpVoices } from './logic/speech'
-import { applyAnswer, isWin, restart, type RoundState } from './logic/state'
-import { loadState, saveState } from './logic/storage'
-import type { Direction, Word } from './types/word'
-import { Header } from './components/Header'
-import { Prompt } from './components/Prompt'
-import { Options, type Feedback } from './components/Options'
+import { initialAppState, loadApp, saveApp, type AppState, type Tab } from './logic/appState'
+import { canSpeak } from './logic/speech'
+import { initialState as initialWords } from './logic/state'
+import type { Direction } from './types/word'
+import { Header, type Stat } from './components/Header'
 import { SettingsSheet } from './components/SettingsSheet'
-import { WinOverlay } from './components/WinOverlay'
-import { WordInfoPopup } from './components/WordInfoPopup'
-
-const CORRECT_DELAY_MS = 500
-const WRONG_DELAY_MS = 1100
-
-interface Question {
-  word: Word
-  options: Word[]
-}
-
-function makeQuestion(state: RoundState): Question | null {
-  const word = pickNext(state, WORDS)
-  if (!word) return null
-  return { word, options: buildOptions(word, WORDS, state.direction) }
-}
+import { TabBar } from './components/TabBar'
+import { GrammarScreen } from './screens/GrammarScreen'
+import { MockScreen } from './screens/MockScreen'
+import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
 
 export default function App() {
-  const [state, setState] = useState<RoundState>(() => loadState(localStorage, WORDS))
-  const [question, setQuestion] = useState<Question | null>(() => makeQuestion(state))
-  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [app, setApp] = useState<AppState>(() => {
+    const loaded = loadApp(localStorage, WORDS, LESSON_IDS)
+    // ?tab=grammar|mock|words — открыть нужную вкладку по ссылке
+    const param = new URLSearchParams(window.location.search).get('tab')
+    const tab: Tab | null = param === 'grammar' || param === 'mock' || param === 'words' ? param : null
+    return tab ? { ...loaded, tab } : loaded
+  })
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [infoOpen, setInfoOpen] = useState(false)
-  const timer = useRef<number | null>(null)
-  const interacted = useRef(false)
 
   useEffect(() => {
-    warmUpVoices()
-  }, [])
+    saveApp(localStorage, app)
+  }, [app])
 
-  useEffect(() => {
-    saveState(localStorage, state)
-  }, [state])
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) window.clearTimeout(timer.current)
-    },
-    [],
-  )
-
-  // автоозвучка нового греческого слова (после первого взаимодействия — iOS требует жест)
-  useEffect(() => {
-    if (!question || !state.autoSpeak || state.direction !== 'el-ru' || !interacted.current) return
-    speak(question.word.el)
-  }, [question, state.autoSpeak, state.direction])
-
-  const answer = useCallback(
-    (option: Word) => {
-      if (!question || feedback) return
-      interacted.current = true
-      const correct = option.id === question.word.id
-      const next = applyAnswer(state, question.word.id, correct)
-      setFeedback({ chosenId: option.id, correct })
-      setState(next)
-      // в направлении «русский → греческий» озвучиваем правильный ответ
-      if (next.autoSpeak && next.direction === 'ru-el') speak(question.word.el)
-      timer.current = window.setTimeout(() => {
-        timer.current = null
-        setFeedback(null)
-        setInfoOpen(false)
-        setQuestion(makeQuestion(next))
-      }, correct ? CORRECT_DELAY_MS : WRONG_DELAY_MS)
-    },
-    [question, feedback, state],
-  )
-
-  const changeDirection = (direction: Direction) => {
-    const next = { ...state, direction }
-    setState(next)
-    setQuestion((q) => (q ? { word: q.word, options: buildOptions(q.word, WORDS, direction) } : q))
-  }
-
+  const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
+  const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
+  const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
   const resetAll = () => {
-    const next = restart(state)
-    setState(next)
-    setFeedback(null)
-    setInfoOpen(false)
-    setQuestion(makeQuestion(next))
+    setApp((a) => ({ ...initialAppState(), tab: a.tab, words: initialWords(a.words.direction, a.words.autoSpeak) }))
     setSettingsOpen(false)
   }
 
-  const speakCurrent = () => {
-    interacted.current = true
-    if (question) speak(question.word.el)
-  }
+  let left: Stat
+  let right: Stat
+  let subtitle: string
+  let progress: number | null
 
-  const won = isWin(state, WORDS)
-  const weakCount = Object.keys(state.weak).length
+  if (app.tab === 'words') {
+    left = { icon: '⚡', value: app.words.score, label: 'Очки', bump: true }
+    right = { icon: '🏆', value: app.words.bestStreak, label: 'Лучший стрик' }
+    subtitle = `Выучено ${app.words.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.words.weak).length}`
+    progress = app.words.learned.length / WORDS.length
+  } else if (app.tab === 'grammar') {
+    left = { icon: '⚡', value: app.grammar.score, label: 'Очки', bump: true }
+    right = { icon: '🏆', value: app.grammar.bestStreak, label: 'Лучший стрик' }
+    subtitle = `Уроков пройдено ${app.grammar.completed.length} / ${LESSONS.length}`
+    progress = app.grammar.completed.length / LESSONS.length
+  } else {
+    const passed = app.mock.history.filter((a) => a.passed).length
+    const best = app.mock.history.reduce((acc, a) => Math.max(acc, a.reading + a.language), 0)
+    left = { icon: '🎓', value: `${passed}`, label: 'Сдано попыток' }
+    right = { icon: '🏆', value: app.mock.history.length ? `${Math.round((best / 50) * 100)}%` : '—', label: 'Лучший результат' }
+    subtitle = `Попыток: ${app.mock.history.length}`
+    progress = null
+  }
 
   return (
     <div className="app">
-      <Header
-        score={state.score}
-        bestStreak={state.bestStreak}
-        learnedCount={state.learned.length}
-        weakCount={weakCount}
-        total={WORDS.length}
-        onSettings={() => setSettingsOpen(true)}
-      />
+      <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)} />
 
-      {question && (
-        <Prompt
-          word={question.word}
-          direction={state.direction}
-          canSpeak={speechAvailable}
-          onTapWord={() => {
-            interacted.current = true
-            setInfoOpen(true)
-          }}
-          onSpeak={speakCurrent}
-        />
-      )}
+      <div className="screen">
+        {app.tab === 'words' && (
+          <WordsScreen state={app.words} onChange={(words) => setApp((a) => ({ ...a, words }))} />
+        )}
+        {app.tab === 'grammar' && (
+          <GrammarScreen state={app.grammar} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
+        )}
+        {app.tab === 'mock' && <MockScreen state={app.mock} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
+      </div>
 
-      {question && (
-        <Options
-          options={question.options}
-          targetId={question.word.id}
-          direction={state.direction}
-          feedback={feedback}
-          onSelect={answer}
-        />
-      )}
-
-      <WordInfoPopup word={infoOpen && question ? question.word : null} onClose={() => setInfoOpen(false)} />
+      <TabBar tab={app.tab} onChange={setTab} />
 
       <SettingsSheet
         open={settingsOpen}
-        direction={state.direction}
-        autoSpeak={state.autoSpeak}
+        direction={app.words.direction}
+        autoSpeak={app.words.autoSpeak}
         canSpeak={speechAvailable}
         onDirection={changeDirection}
-        onAutoSpeak={(autoSpeak) => setState({ ...state, autoSpeak })}
+        onAutoSpeak={changeAutoSpeak}
         onReset={resetAll}
         onClose={() => setSettingsOpen(false)}
       />
-
-      {won && !feedback && <WinOverlay total={WORDS.length} bestStreak={state.bestStreak} onRestart={resetAll} />}
     </div>
   )
 }
