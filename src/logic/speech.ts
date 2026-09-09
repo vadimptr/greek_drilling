@@ -1,19 +1,25 @@
 /** Озвучка греческого текста через Web Speech API. Молча ничего не делает, если API нет. */
 
-let cachedVoice: SpeechSynthesisVoice | null | undefined
-
-function pickGreekVoice(): SpeechSynthesisVoice | null {
-  if (cachedVoice !== undefined) return cachedVoice
-  const voices = window.speechSynthesis.getVoices()
-  const greek = voices.filter((v) => v.lang.toLowerCase().startsWith('el'))
-  // предпочитаем локальный голос (на iOS это «Melina»)
-  cachedVoice = greek.find((v) => v.localService) ?? greek[0] ?? null
-  if (voices.length === 0) cachedVoice = undefined // список ещё не загружен, попробуем в следующий раз
-  return cachedVoice ?? null
-}
+// iOS может «забыть» utterance, если на него нет ссылки, — держим последний.
+let current: SpeechSynthesisUtterance | null = null
 
 export function canSpeak(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window
+}
+
+/**
+ * Выбирает греческий голос. Список голосов на iOS/Android приходит асинхронно и может меняться,
+ * поэтому ничего не кэшируем и ищем при каждом вызове.
+ */
+export function pickGreekVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  const greek = voices.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith('el'))
+  if (greek.length === 0) return null
+  return (
+    greek.find((v) => v.localService && v.default) ??
+    greek.find((v) => v.localService) ??
+    greek.find((v) => v.default) ??
+    greek[0]
+  )
 }
 
 export function speak(text: string): void {
@@ -24,22 +30,23 @@ export function speak(text: string): void {
     const utter = new SpeechSynthesisUtterance(text)
     utter.lang = 'el-GR'
     utter.rate = 0.9
-    const voice = pickGreekVoice()
+    const voice = pickGreekVoice(synth.getVoices())
     if (voice) utter.voice = voice
+    utter.onend = () => {
+      if (current === utter) current = null
+    }
+    current = utter
     synth.speak(utter)
   } catch {
     // озвучка необязательна
   }
 }
 
-/** Прогреть список голосов (на некоторых браузерах он приходит асинхронно). */
+/** Попросить браузер загрузить список голосов заранее (на iOS он пустой до первого обращения). */
 export function warmUpVoices(): void {
   if (!canSpeak()) return
   try {
     window.speechSynthesis.getVoices()
-    window.speechSynthesis.addEventListener?.('voiceschanged', () => {
-      cachedVoice = undefined
-    })
   } catch {
     // ignore
   }
