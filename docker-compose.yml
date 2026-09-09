@@ -1,0 +1,6 @@
+services:
+  greek-drilling:
+    image: ghcr.io/vadimptr/greek_drilling/app:latest
+    ports:
+      - "9093:80"
+    restart: unless-stopped
