@@ -52,6 +52,13 @@ describe('serialize/deserialize', () => {
     const raw = JSON.stringify({ ...initialState(), direction: 'xx' })
     expect(deserialize(raw, words).direction).toBe('el-ru')
   })
+
+  it('autoSpeak defaults to true when missing and is kept when false', () => {
+    const { autoSpeak: _drop, ...legacy } = initialState()
+    void _drop
+    expect(deserialize(JSON.stringify(legacy), words).autoSpeak).toBe(true)
+    expect(deserialize(JSON.stringify(initialState('el-ru', false)), words).autoSpeak).toBe(false)
+  })
 })
 
 describe('loadState/saveState', () => {

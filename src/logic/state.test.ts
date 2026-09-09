@@ -66,10 +66,10 @@ describe('isWin / restart', () => {
     expect(isWin(s, words)).toBe(true)
   })
 
-  it('restart keeps direction and clears everything else', () => {
-    let s = initialState('ru-el')
+  it('restart keeps direction and autoSpeak, clears everything else', () => {
+    let s = initialState('ru-el', false)
     s = applyAnswer(s, 1, true)
     const r = restart(s)
-    expect(r).toEqual(initialState('ru-el'))
+    expect(r).toEqual(initialState('ru-el', false))
   })
 })

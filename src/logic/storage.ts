@@ -40,8 +40,9 @@ export function deserialize(raw: string | null, words: Word[]): RoundState {
   const score = isNonNegInt(obj.score) ? obj.score : 0
   const bestStreak = isNonNegInt(obj.bestStreak) ? obj.bestStreak : 0
   const lastId = isNonNegInt(obj.lastId) && known.has(obj.lastId) ? obj.lastId : null
+  const autoSpeak = typeof obj.autoSpeak === 'boolean' ? obj.autoSpeak : true
 
-  return { learned, weak, score, bestStreak, lastId, direction }
+  return { learned, weak, score, bestStreak, lastId, direction, autoSpeak }
 }
 
 export function loadState(storage: Reader, words: Word[]): RoundState {

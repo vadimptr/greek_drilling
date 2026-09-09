@@ -3,6 +3,7 @@ import './App.css'
 import { WORDS } from './data/words'
 import { buildOptions } from './logic/options'
 import { pickNext } from './logic/pick'
+import { canSpeak, speak, warmUpVoices } from './logic/speech'
 import { applyAnswer, isWin, restart, type RoundState } from './logic/state'
 import { loadState, saveState } from './logic/storage'
 import type { Direction, Word } from './types/word'
@@ -11,6 +12,7 @@ import { Prompt } from './components/Prompt'
 import { Options, type Feedback } from './components/Options'
 import { SettingsSheet } from './components/SettingsSheet'
 import { WinOverlay } from './components/WinOverlay'
+import { WordInfoPopup } from './components/WordInfoPopup'
 
 const CORRECT_DELAY_MS = 500
 const WRONG_DELAY_MS = 1100
@@ -26,12 +28,20 @@ function makeQuestion(state: RoundState): Question | null {
   return { word, options: buildOptions(word, WORDS, state.direction) }
 }
 
+const speechAvailable = canSpeak()
+
 export default function App() {
   const [state, setState] = useState<RoundState>(() => loadState(localStorage, WORDS))
   const [question, setQuestion] = useState<Question | null>(() => makeQuestion(state))
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
   const timer = useRef<number | null>(null)
+  const interacted = useRef(false)
+
+  useEffect(() => {
+    warmUpVoices()
+  }, [])
 
   useEffect(() => {
     saveState(localStorage, state)
@@ -44,16 +54,26 @@ export default function App() {
     [],
   )
 
+  // автоозвучка нового греческого слова (после первого взаимодействия — iOS требует жест)
+  useEffect(() => {
+    if (!question || !state.autoSpeak || state.direction !== 'el-ru' || !interacted.current) return
+    speak(question.word.el)
+  }, [question, state.autoSpeak, state.direction])
+
   const answer = useCallback(
     (option: Word) => {
       if (!question || feedback) return
+      interacted.current = true
       const correct = option.id === question.word.id
       const next = applyAnswer(state, question.word.id, correct)
       setFeedback({ chosenId: option.id, correct })
       setState(next)
+      // в направлении «русский → греческий» озвучиваем правильный ответ
+      if (next.autoSpeak && next.direction === 'ru-el') speak(question.word.el)
       timer.current = window.setTimeout(() => {
         timer.current = null
         setFeedback(null)
+        setInfoOpen(false)
         setQuestion(makeQuestion(next))
       }, correct ? CORRECT_DELAY_MS : WRONG_DELAY_MS)
     },
@@ -70,8 +90,14 @@ export default function App() {
     const next = restart(state)
     setState(next)
     setFeedback(null)
+    setInfoOpen(false)
     setQuestion(makeQuestion(next))
     setSettingsOpen(false)
+  }
+
+  const speakCurrent = () => {
+    interacted.current = true
+    if (question) speak(question.word.el)
   }
 
   const won = isWin(state, WORDS)
@@ -88,7 +114,18 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
       />
 
-      {question && <Prompt word={question.word} direction={state.direction} />}
+      {question && (
+        <Prompt
+          word={question.word}
+          direction={state.direction}
+          canSpeak={speechAvailable}
+          onTapWord={() => {
+            interacted.current = true
+            setInfoOpen(true)
+          }}
+          onSpeak={speakCurrent}
+        />
+      )}
 
       {question && (
         <Options
@@ -100,10 +137,15 @@ export default function App() {
         />
       )}
 
+      <WordInfoPopup word={infoOpen && question ? question.word : null} onClose={() => setInfoOpen(false)} />
+
       <SettingsSheet
         open={settingsOpen}
         direction={state.direction}
+        autoSpeak={state.autoSpeak}
+        canSpeak={speechAvailable}
         onDirection={changeDirection}
+        onAutoSpeak={(autoSpeak) => setState({ ...state, autoSpeak })}
         onReset={resetAll}
         onClose={() => setSettingsOpen(false)}
       />

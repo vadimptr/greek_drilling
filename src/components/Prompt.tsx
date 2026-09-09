@@ -1,31 +1,30 @@
-import type { Direction, Pos, Word } from '../types/word'
+import type { Direction, Word } from '../types/word'
 import { promptOf } from '../logic/options'
-
-const POS_LABEL: Record<Pos, string> = {
-  noun: 'существительное',
-  verb: 'глагол',
-  adj: 'прилагательное',
-  adv: 'наречие',
-  pron: 'местоимение',
-  prep: 'предлог',
-  conj: 'союз',
-  num: 'числительное',
-  phrase: 'фраза',
-  other: '',
-}
+import { transliterate } from '../logic/translit'
 
 interface Props {
   word: Word
   direction: Direction
+  canSpeak: boolean
+  onTapWord: () => void
+  onSpeak: () => void
 }
 
-export function Prompt({ word, direction }: Props) {
+export function Prompt({ word, direction, canSpeak, onTapWord, onSpeak }: Props) {
+  const greekShown = direction === 'el-ru'
   return (
     <main className="prompt">
-      <div key={word.id} className="prompt-word">
-        {promptOf(word, direction)}
+      <div className="prompt-row">
+        <button key={word.id} className="prompt-word" onClick={onTapWord} aria-label="Показать сведения о слове">
+          {promptOf(word, direction)}
+        </button>
+        {greekShown && canSpeak && (
+          <button className="speak-btn" onClick={onSpeak} aria-label="Озвучить">
+            🔊
+          </button>
+        )}
       </div>
-      <div className="prompt-pos">{POS_LABEL[word.pos]}</div>
+      {greekShown && <div className="prompt-translit">{transliterate(word.el)}</div>}
     </main>
   )
 }

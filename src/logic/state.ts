@@ -9,10 +9,11 @@ export interface RoundState {
   bestStreak: number
   lastId: number | null
   direction: Direction
+  autoSpeak: boolean
 }
 
-export function initialState(direction: Direction = 'el-ru'): RoundState {
-  return { learned: [], weak: {}, score: 0, bestStreak: 0, lastId: null, direction }
+export function initialState(direction: Direction = 'el-ru', autoSpeak = true): RoundState {
+  return { learned: [], weak: {}, score: 0, bestStreak: 0, lastId: null, direction, autoSpeak }
 }
 
 function addUnique(ids: number[], id: number): number[] {
@@ -59,5 +60,5 @@ export function isWin(state: RoundState, words: Word[]): boolean {
 }
 
 export function restart(state: RoundState): RoundState {
-  return initialState(state.direction)
+  return initialState(state.direction, state.autoSpeak)
 }
