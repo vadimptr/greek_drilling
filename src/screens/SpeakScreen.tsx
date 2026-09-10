@@ -176,16 +176,21 @@ export function SpeakScreen({ state, hint, onChange }: Props) {
           className={phase === 'listening' ? 'mic-btn mic-listening' : 'mic-btn'}
           style={{ ['--level' as string]: Math.min(1, level * 12) }}
           onClick={listen}
-          disabled={!word || micBlocked || phase === 'processing' || phase === 'correct' || phase === 'wrong'}
+          disabled={!word || micBlocked || phase === 'processing' || phase === 'correct'}
           aria-label={phase === 'listening' ? 'Остановить запись' : 'Сказать слово'}
         >
           {phase === 'processing' ? '…' : phase === 'listening' ? '■' : '🎤'}
         </button>
         <div className="speak-actions">
           {phase === 'wrong' ? (
-            <button className="primary-btn" onClick={nextAfterWrong}>
-              Дальше
-            </button>
+            <>
+              <button className="primary-btn" onClick={listen}>
+                🎤 Ещё раз
+              </button>
+              <button className="secondary-btn" onClick={nextAfterWrong}>
+                Дальше
+              </button>
+            </>
           ) : (
             <>
               {speechAvailable && (
