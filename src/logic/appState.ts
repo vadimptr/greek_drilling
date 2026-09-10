@@ -3,23 +3,39 @@ import type { MockAttempt, MockState } from '../types/mock'
 import type { Word } from '../types/word'
 import { initialGrammarState } from './lesson'
 import { initialMockState } from './mock'
+import { initialSpeakState, type SpeakState } from './speakState'
 import { initialState as initialWords, type RoundState } from './state'
 import { deserialize as deserializeWords, STORAGE_KEY as WORDS_V1_KEY } from './storage'
 
-export type Tab = 'words' | 'grammar' | 'mock'
+export type Tab = 'words' | 'grammar' | 'mock' | 'speak'
+
+/** Что показывать в разделе «Речь»: греческое слово с переводом или только перевод. */
+export type SpeakHint = 'el' | 'ru'
 
 export interface AppState {
-  version: 2
+  version: 3
   tab: Tab
   words: RoundState
   grammar: GrammarState
   mock: MockState
+  speak: SpeakState
+  speakHint: SpeakHint
 }
 
-export const APP_STORAGE_KEY = 'greek_drilling.v2'
+export const APP_STORAGE_KEY = 'greek_drilling.v3'
+/** Предыдущий ключ: формат совместим, читается как есть, если v3 ещё не сохранялся. */
+export const APP_V2_KEY = 'greek_drilling.v2'
 
 export function initialAppState(): AppState {
-  return { version: 2, tab: 'words', words: initialWords(), grammar: initialGrammarState(), mock: initialMockState() }
+  return {
+    version: 3,
+    tab: 'words',
+    words: initialWords(),
+    grammar: initialGrammarState(),
+    mock: initialMockState(),
+    speak: initialSpeakState(),
+    speakHint: 'el',
+  }
 }
 
 export function serializeApp(state: AppState): string {
@@ -65,35 +81,44 @@ function parseMock(raw: unknown): MockState {
   return { history, nextVariant: isNonNegInt(raw.nextVariant) ? raw.nextVariant : 0 }
 }
 
+function parseSpeak(raw: unknown, words: Word[]): SpeakState {
+  if (!isObj(raw)) return initialSpeakState()
+  const { learned, weak, score, bestStreak, lastId } = deserializeWords(JSON.stringify(raw), words)
+  return { learned, weak, score, bestStreak, lastId }
+}
+
 /**
- * Разбирает состояние v2. Если его нет, мигрирует прогресс слов из v1.
- * Любой мусор превращается в начальное состояние соответствующего раздела.
+ * Разбирает состояние v3 (или совместимое v2: без speak/speakHint). Если его нет, мигрирует
+ * прогресс слов из v1. Любой мусор превращается в начальное состояние соответствующего раздела.
  */
 export function deserializeApp(
-  rawV2: string | null,
+  rawApp: string | null,
   rawV1: string | null,
   words: Word[],
   lessonIds: number[],
 ): AppState {
   const ids = new Set(lessonIds)
-  if (rawV2 === null) {
+  if (rawApp === null) {
     return { ...initialAppState(), words: deserializeWords(rawV1, words) }
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(rawV2)
+    parsed = JSON.parse(rawApp)
   } catch {
     return initialAppState()
   }
   if (!isObj(parsed)) return initialAppState()
 
-  const tab: Tab = parsed.tab === 'grammar' || parsed.tab === 'mock' ? parsed.tab : 'words'
+  const tab: Tab =
+    parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' ? parsed.tab : 'words'
   return {
-    version: 2,
+    version: 3,
     tab,
     words: deserializeWords(isObj(parsed.words) ? JSON.stringify(parsed.words) : null, words),
     grammar: parseGrammar(parsed.grammar, ids),
     mock: parseMock(parsed.mock),
+    speak: parseSpeak(parsed.speak, words),
+    speakHint: parsed.speakHint === 'ru' ? 'ru' : 'el',
   }
 }
 
@@ -102,7 +127,8 @@ type Writer = Pick<Storage, 'setItem'>
 
 export function loadApp(storage: Reader, words: Word[], lessonIds: number[]): AppState {
   try {
-    return deserializeApp(storage.getItem(APP_STORAGE_KEY), storage.getItem(WORDS_V1_KEY), words, lessonIds)
+    const rawApp = storage.getItem(APP_STORAGE_KEY) ?? storage.getItem(APP_V2_KEY)
+    return deserializeApp(rawApp, storage.getItem(WORDS_V1_KEY), words, lessonIds)
   } catch {
     return initialAppState()
   }

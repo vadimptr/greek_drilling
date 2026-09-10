@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Word } from '../types/word'
-import { APP_STORAGE_KEY, deserializeApp, initialAppState, loadApp, saveApp, serializeApp } from './appState'
+import { APP_STORAGE_KEY, APP_V2_KEY, deserializeApp, initialAppState, loadApp, saveApp, serializeApp } from './appState'
 import { initialState as initialWords } from './state'
 import { STORAGE_KEY as V1_KEY } from './storage'
 
@@ -16,8 +16,33 @@ describe('deserializeApp', () => {
       words: { ...initialWords('ru-el', false), learned: [2], score: 1, bestStreak: 1, lastId: 2 },
       grammar: { completed: [1, 2], score: 3, bestStreak: 5, active: { lessonId: 3, queue: ['3-2', '3-1'] } },
       mock: { history: [{ date: '2026-09-09', variantId: 1, reading: 20, language: 15, passed: true }], nextVariant: 1 },
+      speak: { learned: [3], weak: { 1: 2 }, score: 2, bestStreak: 6, lastId: 1 },
+      speakHint: 'ru' as const,
     }
     expect(deserializeApp(serializeApp(s), null, words, lessonIds)).toEqual(s)
+  })
+
+  it('reads a v2 blob without speak fields as initial speak state', () => {
+    const v2 = JSON.stringify({ version: 2, tab: 'mock', words: { ...initialWords(), learned: [2] }, grammar: {}, mock: {} })
+    const s = deserializeApp(v2, null, words, lessonIds)
+    expect(s.version).toBe(3)
+    expect(s.tab).toBe('mock')
+    expect(s.words.learned).toEqual([2])
+    expect(s.speak).toEqual(initialAppState().speak)
+    expect(s.speakHint).toBe('el')
+  })
+
+  it('validates speak progress and hint', () => {
+    const raw = JSON.stringify({
+      ...initialAppState(),
+      tab: 'speak',
+      speak: { learned: [1, 99], weak: { 2: 1, 77: 3, 3: 0 }, score: 'x', bestStreak: 4, lastId: 99 },
+      speakHint: 'zzz',
+    })
+    const s = deserializeApp(raw, null, words, lessonIds)
+    expect(s.tab).toBe('speak')
+    expect(s.speak).toEqual({ learned: [1], weak: { 2: 1 }, score: 0, bestStreak: 4, lastId: null })
+    expect(s.speakHint).toBe('el')
   })
 
   it('migrates words from v1 when v2 is absent', () => {
@@ -56,7 +81,18 @@ describe('deserializeApp', () => {
 })
 
 describe('loadApp/saveApp', () => {
-  it('saves under v2 key and prefers v2 over v1', () => {
+  it('falls back to the v2 key when v3 is absent', () => {
+    const store = new Map<string, string>()
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) }
+    storage.setItem(APP_V2_KEY, JSON.stringify({ version: 2, tab: 'grammar', words: { ...initialWords(), learned: [3] } }))
+    const loaded = loadApp(storage, words, lessonIds)
+    expect(loaded.tab).toBe('grammar')
+    expect(loaded.words.learned).toEqual([3])
+    saveApp(storage, loaded)
+    expect(store.has(APP_STORAGE_KEY)).toBe(true)
+  })
+
+  it('saves under the v3 key and prefers it over v1', () => {
     const store = new Map<string, string>()
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) }
     storage.setItem(V1_KEY, JSON.stringify({ ...initialWords(), learned: [1] }))

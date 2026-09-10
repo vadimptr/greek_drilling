@@ -1,0 +1,23 @@
+# Сервер распознавания речи. Наружу порт не публикуется: доступен только контейнерам сети `infra`
+# (nginx приложения проксирует /api/transcribe → http://whisper:8080/inference).
+# Запуск на маке: docker network create infra (один раз); docker compose up -d --build
+services:
+  whisper:
+    build: .
+    image: local/whisper-server:latest
+    container_name: whisper
+    environment:
+      WHISPER_MODEL: small
+      WHISPER_THREADS: 6
+    volumes:
+      - whisper_models:/models
+    networks:
+      - infra
+    restart: unless-stopped
+
+volumes:
+  whisper_models:
+
+networks:
+  infra:
+    external: true

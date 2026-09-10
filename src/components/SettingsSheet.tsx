@@ -1,3 +1,4 @@
+import type { SpeakHint } from '../logic/appState'
 import type { Direction } from '../types/word'
 
 interface Props {
@@ -5,8 +6,10 @@ interface Props {
   direction: Direction
   autoSpeak: boolean
   canSpeak: boolean
+  speakHint: SpeakHint
   onDirection: (d: Direction) => void
   onAutoSpeak: (v: boolean) => void
+  onSpeakHint: (h: SpeakHint) => void
   onReset: () => void
   onClose: () => void
 }
@@ -16,8 +19,10 @@ export function SettingsSheet({
   direction,
   autoSpeak,
   canSpeak,
+  speakHint,
   onDirection,
   onAutoSpeak,
+  onSpeakHint,
   onReset,
   onClose,
 }: Props) {
@@ -27,7 +32,7 @@ export function SettingsSheet({
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2 className="sheet-title">Настройки</h2>
 
-        <div className="sheet-label">Направление</div>
+        <div className="sheet-label">Слова: направление</div>
         <div className="segmented">
           <button
             className={direction === 'el-ru' ? 'seg seg-active' : 'seg'}
@@ -40,6 +45,16 @@ export function SettingsSheet({
             onClick={() => onDirection('ru-el')}
           >
             Русский → Ελληνικά
+          </button>
+        </div>
+
+        <div className="sheet-label">Речь: что показывать</div>
+        <div className="segmented">
+          <button className={speakHint === 'el' ? 'seg seg-active' : 'seg'} onClick={() => onSpeakHint('el')}>
+            Слово и перевод
+          </button>
+          <button className={speakHint === 'ru' ? 'seg seg-active' : 'seg'} onClick={() => onSpeakHint('ru')}>
+            Только перевод
           </button>
         </div>
 

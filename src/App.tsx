@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { LESSONS, LESSON_IDS } from './data/grammar'
 import { WORDS } from './data/words'
-import { initialAppState, loadApp, saveApp, type AppState, type Tab } from './logic/appState'
+import { initialAppState, loadApp, saveApp, type AppState, type SpeakHint, type Tab } from './logic/appState'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
 import type { Direction } from './types/word'
@@ -11,6 +11,7 @@ import { SettingsSheet } from './components/SettingsSheet'
 import { TabBar } from './components/TabBar'
 import { GrammarScreen } from './screens/GrammarScreen'
 import { MockScreen } from './screens/MockScreen'
+import { SpeakScreen } from './screens/SpeakScreen'
 import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
@@ -18,9 +19,10 @@ const speechAvailable = canSpeak()
 export default function App() {
   const [app, setApp] = useState<AppState>(() => {
     const loaded = loadApp(localStorage, WORDS, LESSON_IDS)
-    // ?tab=grammar|mock|words — открыть нужную вкладку по ссылке
+    // ?tab=grammar|mock|words|speak — открыть нужную вкладку по ссылке
     const param = new URLSearchParams(window.location.search).get('tab')
-    const tab: Tab | null = param === 'grammar' || param === 'mock' || param === 'words' ? param : null
+    const tab: Tab | null =
+      param === 'grammar' || param === 'mock' || param === 'words' || param === 'speak' ? param : null
     return tab ? { ...loaded, tab } : loaded
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -32,8 +34,14 @@ export default function App() {
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
   const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
+  const changeSpeakHint = (speakHint: SpeakHint) => setApp((a) => ({ ...a, speakHint }))
   const resetAll = () => {
-    setApp((a) => ({ ...initialAppState(), tab: a.tab, words: initialWords(a.words.direction, a.words.autoSpeak) }))
+    setApp((a) => ({
+      ...initialAppState(),
+      tab: a.tab,
+      words: initialWords(a.words.direction, a.words.autoSpeak),
+      speakHint: a.speakHint,
+    }))
     setSettingsOpen(false)
   }
 
@@ -52,6 +60,11 @@ export default function App() {
     right = { icon: '🏆', value: app.grammar.bestStreak, label: 'Лучший стрик' }
     subtitle = `Уроков пройдено ${app.grammar.completed.length} / ${LESSONS.length}`
     progress = app.grammar.completed.length / LESSONS.length
+  } else if (app.tab === 'speak') {
+    left = { icon: '⚡', value: app.speak.score, label: 'Очки', bump: true }
+    right = { icon: '🏆', value: app.speak.bestStreak, label: 'Лучший стрик' }
+    subtitle = `Произнесено ${app.speak.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.speak.weak).length}`
+    progress = app.speak.learned.length / WORDS.length
   } else {
     const passed = app.mock.history.filter((a) => a.passed).length
     const best = app.mock.history.reduce((acc, a) => Math.max(acc, a.reading + a.language), 0)
@@ -72,6 +85,9 @@ export default function App() {
         {app.tab === 'grammar' && (
           <GrammarScreen state={app.grammar} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
         )}
+        {app.tab === 'speak' && (
+          <SpeakScreen state={app.speak} hint={app.speakHint} onChange={(speak) => setApp((a) => ({ ...a, speak }))} />
+        )}
         {app.tab === 'mock' && <MockScreen state={app.mock} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
@@ -82,8 +98,10 @@ export default function App() {
         direction={app.words.direction}
         autoSpeak={app.words.autoSpeak}
         canSpeak={speechAvailable}
+        speakHint={app.speakHint}
         onDirection={changeDirection}
         onAutoSpeak={changeAutoSpeak}
+        onSpeakHint={changeSpeakHint}
         onReset={resetAll}
         onClose={() => setSettingsOpen(false)}
       />

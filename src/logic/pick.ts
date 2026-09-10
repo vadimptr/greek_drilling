@@ -1,12 +1,12 @@
 import type { Word } from '../types/word'
-import type { RoundState } from './state'
+import type { Progress } from './state'
 
 /** Вероятность взять слово из слабого списка, если есть и слабые, и новые. */
 export const WEAK_PROBABILITY = 0.7
 
 export type Rng = () => number
 
-export function pickNext(state: RoundState, words: Word[], rng: Rng = Math.random): Word | null {
+export function pickNext(state: Progress, words: Word[], rng: Rng = Math.random): Word | null {
   const learned = new Set(state.learned)
   const weakSet = new Set(Object.keys(state.weak).map(Number))
 
