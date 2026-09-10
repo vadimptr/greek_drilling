@@ -1,0 +1,20 @@
+# Обратный прокси с HTTPS для домашнего мака. Запуск: cp этих файлов в /Users/admin/workdir/caddy,
+# рядом .env с CF_API_TOKEN=..., затем `docker compose up -d --build`.
+services:
+  caddy:
+    build: .
+    image: local/caddy-cloudflare:latest
+    ports:
+      - "9094:9094"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
