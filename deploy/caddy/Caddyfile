@@ -1,9 +1,9 @@
 {
-	# раз в 5 минут сверяет публичный IP и правит A-запись languagedrilling.com
+	# раз в 5 минут сверяет публичный IP и правит A-запись languagedrilling.com (формат: зона имя, @ = корень)
 	dynamic_dns {
 		provider cloudflare {env.CF_API_TOKEN}
 		domains {
-			languagedrilling.com
+			languagedrilling.com @
 		}
 		check_interval 5m
 		versions ipv4
