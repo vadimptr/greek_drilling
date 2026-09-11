@@ -127,12 +127,17 @@ export function SpellScreen({ state, onChange }: Props) {
         ? `лишняя буква ${task.correctLetter}`
         : `${wrongLetter} вместо ${task.correctLetter}`
 
+  const groups = groupWords(task.tokens)
+  // длинные слова (до 15 клеток с лишней буквой) должны влезать в ширину iPhone — клетки уже
+  const longest = Math.max(...groups.map((g) => g.length))
+  const sizeClass = longest >= 13 ? 'spell-words spell-words-xs' : longest >= 10 ? 'spell-words spell-words-s' : 'spell-words'
+
   return (
     <main className="spell">
       <div key={`${task.word.id}-${task.kind}-${answer ? (answer.correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
         <div className="spell-ru">{task.word.ru}</div>
-        <div className="spell-words">
-          {groupWords(task.tokens).map((group, gi) => (
+        <div className={sizeClass}>
+          {groups.map((group, gi) => (
             <div key={gi} className="spell-word">
               {group.map((i) => (
                 <button

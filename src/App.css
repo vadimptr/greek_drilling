@@ -546,7 +546,12 @@
 .spell-card-bad { background: color-mix(in srgb, var(--bad) 16%, transparent); animation: shake 0.45s ease; }
 .spell-ru { font-size: 18px; color: var(--muted); }
 .spell-words { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; }
-.spell-word { display: flex; gap: 3px; }
+.spell-word { display: flex; gap: 3px; flex-wrap: nowrap; }
+.spell-words-s .spell-word { gap: 2px; }
+.spell-words-s .tile { min-width: 26px; padding: 0 2px; font-size: 21px; height: 42px; border-radius: 8px; }
+.spell-words-xs .spell-word { gap: 2px; }
+.spell-words-xs .tile { min-width: 21px; padding: 0 1px; font-size: 17px; height: 40px; border-radius: 7px; }
+.spell-words-xs .tile-was, .spell-words-s .tile-was { font-size: 11px; margin-right: 1px; }
 .tile {
   min-width: 34px;
   height: 46px;
