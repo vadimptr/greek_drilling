@@ -107,9 +107,25 @@ export function SpellScreen({ state, onChange }: Props) {
   const tileText = (i: number) => {
     const t = task.tokens[i]
     if (task.kind === 'missing' && t === '') return answer ? task.correctLetter : '?'
-    if (answer && task.kind === 'wrong' && task.answerIndices.includes(i)) return task.correctLetter
+    if (answer && task.kind === 'wrong' && task.answerIndices.includes(i)) {
+      // показать и что было написано, и что должно быть
+      return (
+        <>
+          <s className="tile-was">{t}</s>
+          {task.correctLetter}
+        </>
+      )
+    }
     return t
   }
+
+  const wrongLetter = task.kind === 'wrong' ? task.tokens[task.answerIndices[0]] : ''
+  const explain =
+    task.kind === 'missing'
+      ? `пропущена буква ${task.correctLetter}`
+      : task.kind === 'extra'
+        ? `лишняя буква ${task.correctLetter}`
+        : `${wrongLetter} вместо ${task.correctLetter}`
 
   return (
     <main className="spell">
@@ -137,7 +153,7 @@ export function SpellScreen({ state, onChange }: Props) {
           {answer && answer.correct && <span className="speak-ok">✓ Верно!</span>}
           {answer && !answer.correct && (
             <span className="spell-answer">
-              <span className="speak-bad">✗</span> Правильно: <span className="spell-correct">{task.word.el}</span>
+              <span className="speak-bad">✗ {explain}.</span> Правильно: <span className="spell-correct">{task.word.el}</span>
             </span>
           )}
         </div>
