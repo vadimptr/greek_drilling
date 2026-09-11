@@ -12,6 +12,7 @@ import { TabBar } from './components/TabBar'
 import { GrammarScreen } from './screens/GrammarScreen'
 import { MockScreen } from './screens/MockScreen'
 import { SpeakScreen } from './screens/SpeakScreen'
+import { SpellScreen } from './screens/SpellScreen'
 import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
@@ -19,10 +20,10 @@ const speechAvailable = canSpeak()
 export default function App() {
   const [app, setApp] = useState<AppState>(() => {
     const loaded = loadApp(localStorage, WORDS, LESSON_IDS)
-    // ?tab=grammar|mock|words|speak — открыть нужную вкладку по ссылке
+    // ?tab=grammar|mock|words|speak|spell — открыть нужную вкладку по ссылке
     const param = new URLSearchParams(window.location.search).get('tab')
-    const tab: Tab | null =
-      param === 'grammar' || param === 'mock' || param === 'words' || param === 'speak' ? param : null
+    const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock']
+    const tab = tabs.find((t) => t === param) ?? null
     return tab ? { ...loaded, tab } : loaded
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -65,6 +66,11 @@ export default function App() {
     right = { icon: '🏆', value: app.speak.bestStreak, label: 'Лучший стрик' }
     subtitle = `Произнесено ${app.speak.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.speak.weak).length}`
     progress = app.speak.learned.length / WORDS.length
+  } else if (app.tab === 'spell') {
+    left = { icon: '⚡', value: app.spell.score, label: 'Очки', bump: true }
+    right = { icon: '🏆', value: app.spell.bestStreak, label: 'Лучший стрик' }
+    subtitle = `Написано ${app.spell.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.spell.weak).length}`
+    progress = app.spell.learned.length / WORDS.length
   } else {
     const passed = app.mock.history.filter((a) => a.passed).length
     const best = app.mock.history.reduce((acc, a) => Math.max(acc, a.reading + a.language), 0)
@@ -87,6 +93,9 @@ export default function App() {
         )}
         {app.tab === 'speak' && (
           <SpeakScreen state={app.speak} hint={app.speakHint} onChange={(speak) => setApp((a) => ({ ...a, speak }))} />
+        )}
+        {app.tab === 'spell' && (
+          <SpellScreen state={app.spell} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'mock' && <MockScreen state={app.mock} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>

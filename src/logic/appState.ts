@@ -4,10 +4,11 @@ import type { Word } from '../types/word'
 import { initialGrammarState } from './lesson'
 import { initialMockState } from './mock'
 import { initialSpeakState, type SpeakState } from './speakState'
+import { initialSpellState, type SpellState } from './spell'
 import { initialState as initialWords, type RoundState } from './state'
 import { deserialize as deserializeWords, STORAGE_KEY as WORDS_V1_KEY } from './storage'
 
-export type Tab = 'words' | 'grammar' | 'mock' | 'speak'
+export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell'
 
 /** Что показывать в разделе «Речь»: греческое слово с переводом или только перевод. */
 export type SpeakHint = 'el' | 'ru'
@@ -20,6 +21,7 @@ export interface AppState {
   mock: MockState
   speak: SpeakState
   speakHint: SpeakHint
+  spell: SpellState
 }
 
 export const APP_STORAGE_KEY = 'greek_drilling.v3'
@@ -35,6 +37,7 @@ export function initialAppState(): AppState {
     mock: initialMockState(),
     speak: initialSpeakState(),
     speakHint: 'el',
+    spell: initialSpellState(),
   }
 }
 
@@ -81,7 +84,8 @@ function parseMock(raw: unknown): MockState {
   return { history, nextVariant: isNonNegInt(raw.nextVariant) ? raw.nextVariant : 0 }
 }
 
-function parseSpeak(raw: unknown, words: Word[]): SpeakState {
+/** Прогресс без настроек направления — общий парсер для «Речи» и «Письма». */
+function parseProgress(raw: unknown, words: Word[]): SpeakState {
   if (!isObj(raw)) return initialSpeakState()
   const { learned, weak, score, bestStreak, lastId } = deserializeWords(JSON.stringify(raw), words)
   return { learned, weak, score, bestStreak, lastId }
@@ -110,15 +114,18 @@ export function deserializeApp(
   if (!isObj(parsed)) return initialAppState()
 
   const tab: Tab =
-    parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' ? parsed.tab : 'words'
+    parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' || parsed.tab === 'spell'
+      ? parsed.tab
+      : 'words'
   return {
     version: 3,
     tab,
     words: deserializeWords(isObj(parsed.words) ? JSON.stringify(parsed.words) : null, words),
     grammar: parseGrammar(parsed.grammar, ids),
     mock: parseMock(parsed.mock),
-    speak: parseSpeak(parsed.speak, words),
+    speak: parseProgress(parsed.speak, words),
     speakHint: parsed.speakHint === 'ru' ? 'ru' : 'el',
+    spell: parseProgress(parsed.spell, words),
   }
 }
 

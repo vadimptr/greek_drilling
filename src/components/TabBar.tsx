@@ -9,6 +9,7 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'words', icon: '🔤', label: 'Слова' },
   { id: 'grammar', icon: '📖', label: 'Грамматика' },
   { id: 'speak', icon: '🎤', label: 'Речь' },
+  { id: 'spell', icon: '✍️', label: 'Письмо' },
   { id: 'mock', icon: '📝', label: 'Тест' },
 ]
 

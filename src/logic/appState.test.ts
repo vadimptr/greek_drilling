@@ -18,6 +18,7 @@ describe('deserializeApp', () => {
       mock: { history: [{ date: '2026-09-09', variantId: 1, reading: 20, language: 15, passed: true }], nextVariant: 1 },
       speak: { learned: [3], weak: { 1: 2 }, score: 2, bestStreak: 6, lastId: 1 },
       speakHint: 'ru' as const,
+      spell: { learned: [1, 2], weak: { 3: 1 }, score: 5, bestStreak: 9, lastId: 3 },
     }
     expect(deserializeApp(serializeApp(s), null, words, lessonIds)).toEqual(s)
   })
@@ -30,6 +31,14 @@ describe('deserializeApp', () => {
     expect(s.words.learned).toEqual([2])
     expect(s.speak).toEqual(initialAppState().speak)
     expect(s.speakHint).toBe('el')
+    expect(s.spell).toEqual(initialAppState().spell)
+  })
+
+  it('validates spell progress and accepts the spell tab', () => {
+    const raw = JSON.stringify({ ...initialAppState(), tab: 'spell', spell: { learned: [2, 55], weak: { 1: 3 }, score: 1, bestStreak: 1, lastId: 2 } })
+    const s = deserializeApp(raw, null, words, lessonIds)
+    expect(s.tab).toBe('spell')
+    expect(s.spell).toEqual({ learned: [2], weak: { 1: 3 }, score: 1, bestStreak: 1, lastId: 2 })
   })
 
   it('validates speak progress and hint', () => {
