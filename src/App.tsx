@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { LESSONS, LESSON_IDS } from './data/grammar'
 import { WORDS } from './data/words'
-import { initialAppState, loadApp, saveApp, type AppState, type SpeakHint, type Tab } from './logic/appState'
+import { initialAppState, loadApp, saveApp, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
+import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
 import type { Direction } from './types/word'
@@ -13,6 +14,8 @@ import { GrammarScreen } from './screens/GrammarScreen'
 import { MockScreen } from './screens/MockScreen'
 import { SpeakScreen } from './screens/SpeakScreen'
 import { SpellScreen } from './screens/SpellScreen'
+import { NounsScreen } from './screens/NounsScreen'
+import { SubPicker } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
@@ -36,12 +39,14 @@ export default function App() {
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
   const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
   const changeSpeakHint = (speakHint: SpeakHint) => setApp((a) => ({ ...a, speakHint }))
+  const setGrammarSub = (grammarSub: GrammarSub) => setApp((a) => ({ ...a, grammarSub }))
   const resetAll = () => {
     setApp((a) => ({
       ...initialAppState(),
       tab: a.tab,
       words: initialWords(a.words.direction, a.words.autoSpeak),
       speakHint: a.speakHint,
+      grammarSub: a.grammarSub,
     }))
     setSettingsOpen(false)
   }
@@ -56,6 +61,11 @@ export default function App() {
     right = { icon: '🏆', value: app.words.bestStreak, label: 'Лучший стрик' }
     subtitle = `Выучено ${app.words.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.words.weak).length}`
     progress = app.words.learned.length / WORDS.length
+  } else if (app.tab === 'grammar' && app.grammarSub === 'nouns') {
+    left = { icon: '⚡', value: app.nouns.score, label: 'Очки', bump: true }
+    right = { icon: '🏆', value: app.nouns.bestStreak, label: 'Лучший стрик' }
+    subtitle = `Склонение: усвоено ${app.nouns.learned.length} / ${NOUNS.length} · слабых ${Object.keys(app.nouns.weak).length}`
+    progress = app.nouns.learned.length / NOUNS.length
   } else if (app.tab === 'grammar') {
     left = { icon: '⚡', value: app.grammar.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.grammar.bestStreak, label: 'Лучший стрик' }
@@ -89,7 +99,16 @@ export default function App() {
           <WordsScreen state={app.words} onChange={(words) => setApp((a) => ({ ...a, words }))} />
         )}
         {app.tab === 'grammar' && (
-          <GrammarScreen state={app.grammar} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
+          <div className="grammar-hub">
+            <SubPicker value={app.grammarSub} onChange={setGrammarSub} />
+            <div className="hub-body">
+              {app.grammarSub === 'lessons' ? (
+                <GrammarScreen state={app.grammar} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
+              ) : (
+                <NounsScreen state={app.nouns} onChange={(nouns) => setApp((a) => ({ ...a, nouns }))} />
+              )}
+            </div>
+          </div>
         )}
         {app.tab === 'speak' && (
           <SpeakScreen state={app.speak} hint={app.speakHint} onChange={(speak) => setApp((a) => ({ ...a, speak }))} />

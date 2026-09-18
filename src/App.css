@@ -16,7 +16,10 @@
   -webkit-overflow-scrolling: touch;
 }
 .screen > .prompt { flex: 1; }
-.screen > .lesson-list, .screen > .explain, .screen > .mock, .screen > .mock-start, .screen > .result, .screen > .done, .screen > .speak, .screen > .spell { flex: 1; }
+.screen > .lesson-list, .screen > .explain, .screen > .mock, .screen > .mock-start, .screen > .result, .screen > .done, .screen > .speak, .screen > .spell, .screen > .grammar-hub { flex: 1; }
+.grammar-hub { display: flex; flex-direction: column; }
+.hub-body { flex: 1; display: flex; flex-direction: column; }
+.hub-body > .lesson-list, .hub-body > .explain, .hub-body > .done, .hub-body > .nouns, .hub-body > .prompt { flex: 1; }
 
 /* tab bar */
 .tabbar {
@@ -584,3 +587,67 @@
 .letter-option { min-height: 64px; font-size: 30px; font-weight: 700; }
 .spell-row { display: flex; gap: 10px; }
 .spell-row .primary-btn, .spell-row .secondary-btn { flex: 1; }
+
+/* grammar sub-picker */
+.sub-picker {
+  align-self: flex-start;
+  margin: 10px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 15px;
+  font-weight: 600;
+}
+.sub-picker-caret { color: var(--muted); font-size: 13px; }
+.sub-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.sub-option-active { border-color: var(--accent); }
+.sub-option-icon { font-size: 24px; }
+.sub-option-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.sub-option-title { font-weight: 600; font-size: 16px; }
+.sub-option-desc { font-size: 13px; color: var(--muted); }
+.sub-option-check { color: var(--accent); font-weight: 700; }
+
+/* nouns section */
+.nouns {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0 12px;
+  text-align: center;
+}
+.nouns-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 20px;
+  padding: 12px;
+  animation: fade-in 0.25s ease;
+}
+.nouns-form { font-size: clamp(28px, 8vw, 38px); font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.nouns-arrow { font-size: 17px; color: var(--accent); font-weight: 600; }
+.nouns-row { display: flex; flex-direction: column; gap: 4px; }
+.nouns-row-label { font-size: 12px; color: var(--muted); text-align: left; padding-left: 4px; }
+.seg-3 { grid-template-columns: 1fr 1fr 1fr; }
+.seg:disabled { opacity: 1; }
+.seg-ok { background: var(--ok); color: #fff; font-weight: 600; }
+.seg-bad { background: var(--bad); color: #fff; font-weight: 600; }
+.spell-bottom .primary-btn:disabled { opacity: 0.45; }

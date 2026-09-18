@@ -19,6 +19,8 @@ describe('deserializeApp', () => {
       speak: { learned: [3], weak: { 1: 2 }, score: 2, bestStreak: 6, lastId: 1 },
       speakHint: 'ru' as const,
       spell: { learned: [1, 2], weak: { 3: 1 }, score: 5, bestStreak: 9, lastId: 3 },
+      nouns: { learned: [2], weak: {}, score: 1, bestStreak: 2, lastId: 2 },
+      grammarSub: 'nouns' as const,
     }
     expect(deserializeApp(serializeApp(s), null, words, lessonIds)).toEqual(s)
   })
@@ -32,6 +34,8 @@ describe('deserializeApp', () => {
     expect(s.speak).toEqual(initialAppState().speak)
     expect(s.speakHint).toBe('el')
     expect(s.spell).toEqual(initialAppState().spell)
+    expect(s.nouns).toEqual(initialAppState().nouns)
+    expect(s.grammarSub).toBe('lessons')
   })
 
   it('validates spell progress and accepts the spell tab', () => {

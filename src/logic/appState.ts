@@ -13,6 +13,9 @@ export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell'
 /** Что показывать в разделе «Речь»: греческое слово с переводом или только перевод. */
 export type SpeakHint = 'el' | 'ru'
 
+/** Подраздел вкладки «Грамматика»: уроки или тренажёр склонения. */
+export type GrammarSub = 'lessons' | 'nouns'
+
 export interface AppState {
   version: 3
   tab: Tab
@@ -22,6 +25,9 @@ export interface AppState {
   speak: SpeakState
   speakHint: SpeakHint
   spell: SpellState
+  /** Прогресс тренажёра склонения (ключи — id слов). */
+  nouns: SpeakState
+  grammarSub: GrammarSub
 }
 
 export const APP_STORAGE_KEY = 'greek_drilling.v3'
@@ -38,6 +44,8 @@ export function initialAppState(): AppState {
     speak: initialSpeakState(),
     speakHint: 'el',
     spell: initialSpellState(),
+    nouns: initialSpeakState(),
+    grammarSub: 'lessons',
   }
 }
 
@@ -126,6 +134,8 @@ export function deserializeApp(
     speak: parseProgress(parsed.speak, words),
     speakHint: parsed.speakHint === 'ru' ? 'ru' : 'el',
     spell: parseProgress(parsed.spell, words),
+    nouns: parseProgress(parsed.nouns, words),
+    grammarSub: parsed.grammarSub === 'nouns' ? 'nouns' : 'lessons',
   }
 }
 
