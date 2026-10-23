@@ -651,3 +651,20 @@
 .seg-ok { background: var(--ok); color: #fff; font-weight: 600; }
 .seg-bad { background: var(--bad); color: #fff; font-weight: 600; }
 .spell-bottom .primary-btn:disabled { opacity: 0.45; }
+
+/* account */
+.account-form { display: flex; flex-direction: column; gap: 14px; }
+.account-input {
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: inherit;
+  font-size: 18px;
+  padding: 0 14px;
+}
+.account-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.account-name { font-size: 20px; font-weight: 600; }
+.account-error { color: var(--bad); font-size: 14px; }
+.primary-btn:disabled, .secondary-btn:disabled { opacity: 0.5; }
+.login-btn { width: auto; padding: 0 12px; font-size: 15px; font-weight: 600; color: var(--accent); }

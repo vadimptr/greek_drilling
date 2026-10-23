@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run && node --test \"server/**/*.test.ts\"",
+    "server": "SESSION_SECRET=dev-secret-0123456789 node --watch server/index.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

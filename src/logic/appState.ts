@@ -33,6 +33,8 @@ export interface AppState {
 export const APP_STORAGE_KEY = 'greek_drilling.v3'
 /** Предыдущий ключ: формат совместим, читается как есть, если v3 ещё не сохранялся. */
 export const APP_V2_KEY = 'greek_drilling.v2'
+export const USER_CACHE_KEY = 'greek_drilling.v3.user'
+export const USER_HINT_KEY = 'greek_drilling.user'
 
 export function initialAppState(): AppState {
   return {
@@ -151,9 +153,21 @@ export function loadApp(storage: Reader, words: Word[], lessonIds: number[]): Ap
   }
 }
 
-export function saveApp(storage: Writer, state: AppState): void {
+export function loadUserCache(storage: Reader, words: Word[], lessonIds: number[]): AppState {
   try {
-    storage.setItem(APP_STORAGE_KEY, serializeApp(state))
+    return deserializeApp(storage.getItem(USER_CACHE_KEY), null, words, lessonIds)
+  } catch {
+    return initialAppState()
+  }
+}
+
+export function parseRemote(state: unknown, words: Word[], lessonIds: number[]): AppState | null {
+  return state === null || state === undefined ? null : deserializeApp(JSON.stringify(state), null, words, lessonIds)
+}
+
+export function saveApp(storage: Writer, state: AppState, key: string = APP_STORAGE_KEY): void {
+  try {
+    storage.setItem(key, serializeApp(state))
   } catch {
     // localStorage недоступен — прогресс не сохранится
   }

@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
-import { LESSONS, LESSON_IDS } from './data/grammar'
+import { LESSONS } from './data/grammar'
 import { WORDS } from './data/words'
-import { initialAppState, loadApp, saveApp, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
+import { initialAppState, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
 import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
 import type { Direction } from './types/word'
 import { Header, type Stat } from './components/Header'
 import { SettingsSheet } from './components/SettingsSheet'
+import { AccountSheet } from './components/AccountSheet'
+import { initialLoad, useAccount } from './logic/useAccount'
 import { TabBar } from './components/TabBar'
 import { GrammarScreen } from './screens/GrammarScreen'
 import { MockScreen } from './screens/MockScreen'
@@ -20,9 +22,11 @@ import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
 
+const boot = initialLoad()
+
 export default function App() {
   const [app, setApp] = useState<AppState>(() => {
-    const loaded = loadApp(localStorage, WORDS, LESSON_IDS)
+    const loaded = boot.app
     // ?tab=grammar|mock|words|speak|spell — открыть нужную вкладку по ссылке
     const param = new URLSearchParams(window.location.search).get('tab')
     const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock']
@@ -30,10 +34,8 @@ export default function App() {
     return tab ? { ...loaded, tab } : loaded
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
-
-  useEffect(() => {
-    saveApp(localStorage, app)
-  }, [app])
+  const [accountOpen, setAccountOpen] = useState(false)
+  const account = useAccount(app, setApp, boot.user)
 
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
@@ -92,7 +94,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)} />
+      <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)}
+        signedIn={account.user !== null}
+        onAccount={() => setAccountOpen(true)}
+      />
 
       <div className="screen">
         {app.tab === 'words' && (
@@ -120,6 +125,14 @@ export default function App() {
       </div>
 
       <TabBar tab={app.tab} onChange={setTab} />
+
+      <AccountSheet
+        open={accountOpen}
+        user={account.user}
+        onSignIn={account.signIn}
+        onSignOut={() => void account.signOut()}
+        onClose={() => setAccountOpen(false)}
+      />
 
       <SettingsSheet
         open={settingsOpen}

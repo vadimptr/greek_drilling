@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -8,6 +8,22 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
+
+# API stage
+FROM node:24-alpine AS api
+
+WORKDIR /app
+
+COPY package.json ./
+COPY server ./server
+COPY src/logic/name.ts ./src/logic/name.ts
+
+ENV PORT=3000 DB_PATH=/data/gd.db NODE_ENV=production
+RUN mkdir -p /data && chown node:node /data
+VOLUME /data
+EXPOSE 3000
+USER node
+CMD ["node", "server/index.ts"]
 
 # Serve stage
 FROM nginx:alpine AS runner

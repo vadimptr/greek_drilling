@@ -3,11 +3,24 @@ services:
     image: ghcr.io/vadimptr/greek_drilling/app:latest
     ports:
       - "9093:80"
+    depends_on:
+      - api
     networks:
       - default
       - infra   # доступ к whisper-server (deploy/whisper), сеть создаётся один раз: docker network create infra
     restart: unless-stopped
 
+  api:
+    image: ghcr.io/vadimptr/greek_drilling/api:latest
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required in .env}
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
 networks:
   infra:
     external: true
+
+volumes:
+  data:
