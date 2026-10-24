@@ -47,7 +47,7 @@ function mergeMock(local: MockState, remote: MockState): MockState {
 }
 
 export function hasProgress(s: AppState): boolean {
-  const parts: Progress[] = [s.words, s.speak, s.spell, s.nouns]
+  const parts: Progress[] = [s.words, s.speak, s.spell, s.nouns, s.aorist]
   return (
     parts.some((p) => p.learned.length > 0 || Object.keys(p.weak).length > 0 || p.score > 0 || p.bestStreak > 0) ||
     s.grammar.completed.length > 0 ||
@@ -68,5 +68,6 @@ export function mergeApp(local: AppState, remote: AppState | null): AppState {
     speak: mergeProgress(local.speak, remote.speak),
     spell: mergeProgress(local.spell, remote.spell),
     nouns: mergeProgress(local.nouns, remote.nouns),
+    aorist: mergeProgress(local.aorist, remote.aorist),
   }
 }

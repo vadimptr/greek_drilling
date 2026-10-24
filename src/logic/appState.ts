@@ -2,6 +2,7 @@ import type { GrammarState } from '../types/grammar'
 import type { MockAttempt, MockState } from '../types/mock'
 import type { Word } from '../types/word'
 import { initialGrammarState } from './lesson'
+import { AORIST_WORDS } from './aorist'
 import { initialMockState } from './mock'
 import { initialSpeakState, type SpeakState } from './speakState'
 import { initialSpellState, type SpellState } from './spell'
@@ -13,8 +14,8 @@ export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell'
 /** Что показывать в разделе «Речь»: греческое слово с переводом или только перевод. */
 export type SpeakHint = 'el' | 'ru'
 
-/** Подраздел вкладки «Грамматика»: уроки или тренажёр склонения. */
-export type GrammarSub = 'lessons' | 'nouns'
+/** Подраздел вкладки «Грамматика»: уроки, тренажёр склонения или аорист. */
+export type GrammarSub = 'lessons' | 'nouns' | 'aorist'
 
 export interface AppState {
   version: 3
@@ -27,6 +28,8 @@ export interface AppState {
   spell: SpellState
   /** Прогресс тренажёра склонения (ключи — id слов). */
   nouns: SpeakState
+  /** Прогресс раздела «Аорист» (ключи — id глаголов из data/aorist). */
+  aorist: SpeakState
   grammarSub: GrammarSub
 }
 
@@ -47,6 +50,7 @@ export function initialAppState(): AppState {
     speakHint: 'el',
     spell: initialSpellState(),
     nouns: initialSpeakState(),
+    aorist: initialSpeakState(),
     grammarSub: 'lessons',
   }
 }
@@ -137,7 +141,8 @@ export function deserializeApp(
     speakHint: parsed.speakHint === 'ru' ? 'ru' : 'el',
     spell: parseProgress(parsed.spell, words),
     nouns: parseProgress(parsed.nouns, words),
-    grammarSub: parsed.grammarSub === 'nouns' ? 'nouns' : 'lessons',
+    aorist: parseProgress(parsed.aorist, AORIST_WORDS),
+    grammarSub: parsed.grammarSub === 'nouns' || parsed.grammarSub === 'aorist' ? parsed.grammarSub : 'lessons',
   }
 }
 

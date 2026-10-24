@@ -11,7 +11,7 @@ interface Props {
 
 const speechAvailable = canSpeak()
 
-function Section({ s }: { s: LessonSection }) {
+export function Section({ s }: { s: LessonSection }) {
   switch (s.type) {
     case 'text':
       return <p className="sec-text">{s.text}</p>

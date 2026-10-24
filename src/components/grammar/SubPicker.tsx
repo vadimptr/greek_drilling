@@ -4,6 +4,7 @@ import type { GrammarSub } from '../../logic/appState'
 export const SUBS: { id: GrammarSub; title: string; description: string; icon: string }[] = [
   { id: 'lessons', title: 'Грамматика', description: '30 уроков с правилами и упражнениями', icon: '📖' },
   { id: 'nouns', title: 'Склонение', description: 'Род, падеж и число существительных', icon: '🔠' },
+  { id: 'aorist', title: 'Аорист', description: 'Прошедшее время: правила и 38 главных глаголов', icon: '⏪' },
 ]
 
 interface Props {
