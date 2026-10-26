@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { WORDS } from '../data/words'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
 import { checkSpell, initialSpellState, makeSpellTask, type SpellState, type SpellTask } from '../logic/spell'
 import { applyAnswer, isWin } from '../logic/state'
+import type { Word } from '../types/word'
 import { WinOverlay } from '../components/WinOverlay'
 
 const CORRECT_DELAY_MS = 650
@@ -17,6 +17,7 @@ const TASK_TEXT: Record<SpellTask['kind'], string> = {
 
 interface Props {
   state: SpellState
+  words: Word[]
   onChange: (next: SpellState) => void
 }
 
@@ -26,8 +27,8 @@ interface Answer {
   correct: boolean
 }
 
-function nextTask(state: SpellState): SpellTask | null {
-  const word = pickNext(state, WORDS)
+function nextTask(state: SpellState, words: Word[]): SpellTask | null {
+  const word = pickNext(state, words)
   return word ? makeSpellTask(word) : null
 }
 
@@ -41,8 +42,8 @@ function groupWords(tokens: string[]): number[][] {
   return groups.filter((g) => g.length > 0)
 }
 
-export function SpellScreen({ state, onChange }: Props) {
-  const [task, setTask] = useState<SpellTask | null>(() => nextTask(state))
+export function SpellScreen({ state, words, onChange }: Props) {
+  const [task, setTask] = useState<SpellTask | null>(() => nextTask(state, words))
   const [answer, setAnswer] = useState<Answer | null>(null)
   const timer = useRef<number | null>(null)
 
@@ -54,13 +55,16 @@ export function SpellScreen({ state, onChange }: Props) {
   )
 
   useEffect(() => {
-    if (task === null && !isWin(state, WORDS)) setTask(nextTask(state))
-  }, [state, task])
+    if (task === null && !isWin(state, words)) setTask(nextTask(state, words))
+  }, [state, task, words])
 
-  const advance = useCallback((next: SpellState) => {
-    setAnswer(null)
-    setTask(nextTask(next))
-  }, [])
+  const advance = useCallback(
+    (next: SpellState) => {
+      setAnswer(null)
+      setTask(nextTask(next, words))
+    },
+    [words],
+  )
 
   const submit = (a: { index?: number; option?: string }) => {
     if (!task || answer) return
@@ -84,8 +88,8 @@ export function SpellScreen({ state, onChange }: Props) {
     advance(next)
   }
 
-  const won = isWin(state, WORDS)
-  if (!task) return <main className="spell">{won && <WinOverlay total={WORDS.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
+  const won = isWin(state, words)
+  if (!task) return <main className="spell">{won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
 
   const tappable = task.kind !== 'missing' && !answer
   const cardClass = answer ? (answer.correct ? 'spell-card spell-card-ok' : 'spell-card spell-card-bad') : 'spell-card'
@@ -207,7 +211,7 @@ export function SpellScreen({ state, onChange }: Props) {
         </div>
       </div>
 
-      {won && !answer && <WinOverlay total={WORDS.length} bestStreak={state.bestStreak} onRestart={restart} />}
+      {won && !answer && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}
     </main>
   )
 }

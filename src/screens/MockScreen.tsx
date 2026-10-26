@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { VARIANTS } from '../data/mock'
+import { variantLevel, variantsFor, variantTitle } from '../data/mock'
 import {
   emptyLanguageAnswers,
   emptyReadingAnswers,
@@ -12,6 +12,7 @@ import {
   recordAttempt,
 } from '../logic/mock'
 import type { LanguageAnswers, MockState, MockVariant, ReadingAnswers } from '../types/mock'
+import type { Level } from '../types/word'
 import { MockResult } from '../components/mock/MockResult'
 import { ReadingTaskView, TaskText } from '../components/mock/ReadingTasks'
 import { Timer } from '../components/mock/Timer'
@@ -20,14 +21,17 @@ type Mode = 'start' | 'reading' | 'language' | 'result'
 
 interface Props {
   state: MockState
+  level: Level
   onChange: (next: MockState) => void
 }
 
 const LETTERS = ['α', 'β', 'γ']
 
-export function MockScreen({ state, onChange }: Props) {
+export function MockScreen({ state, level, onChange }: Props) {
+  const variants = variantsFor(level)
+  const history = state.history.filter((a) => variantLevel(a.variantId) === level)
   const [mode, setMode] = useState<Mode>('start')
-  const [variant, setVariant] = useState<MockVariant>(VARIANTS[state.nextVariant % VARIANTS.length])
+  const [variant, setVariant] = useState<MockVariant>(variants[state.nextVariant % variants.length])
   const [reading, setReading] = useState<ReadingAnswers>([])
   const [language, setLanguage] = useState<LanguageAnswers>([])
   const [taskIndex, setTaskIndex] = useState(0)
@@ -39,7 +43,7 @@ export function MockScreen({ state, onChange }: Props) {
   }, [mode, taskIndex])
 
   const start = () => {
-    const v = VARIANTS[state.nextVariant % VARIANTS.length]
+    const v = variants[state.nextVariant % variants.length]
     setVariant(v)
     setReading(emptyReadingAnswers(v))
     setLanguage(emptyLanguageAnswers(v))
@@ -61,23 +65,23 @@ export function MockScreen({ state, onChange }: Props) {
       recordAttempt(
         state,
         { date: new Date().toISOString().slice(0, 10), variantId: variant.id, reading: r.total, language: l.total, passed },
-        VARIANTS.length,
+        variants.length,
       ),
     )
     setMode('result')
-  }, [variant, reading, language, state, onChange])
+  }, [variant, reading, language, state, onChange, variants.length])
 
   if (mode === 'start') {
-    const best = state.history.reduce<number | null>((acc, a) => {
+    const best = history.reduce<number | null>((acc, a) => {
       const pct = Math.round(((a.reading + a.language) / 50) * 100)
       return acc === null || pct > acc ? pct : acc
     }, null)
-    const next = VARIANTS[state.nextVariant % VARIANTS.length]
+    const next = variants[state.nextVariant % variants.length]
     return (
       <main className="mock-start">
-        <h1 className="explain-title">Мок-экзамен A1</h1>
+        <h1 className="explain-title">Мок-экзамен {level}</h1>
         <p className="sec-text">
-          Формат части «Κατανόηση γραπτού λόγου» повторяет экзамен Ελληνομάθεια A1 Центра греческого языка: 4
+          Формат части «Κατανόηση γραπτού λόγου» повторяет экзамен Ελληνομάθεια {level} Центра греческого языка: 4
           задания, 25 баллов, {READING_MINUTES} минут. Вторая часть — 25 вопросов по грамматике и лексике,{' '}
           {LANGUAGE_MINUTES} минут.
         </p>
@@ -89,13 +93,13 @@ export function MockScreen({ state, onChange }: Props) {
           Начать: {next.title}
         </button>
         {best !== null && <div className="mock-best">Лучший результат: {best}%</div>}
-        {state.history.length > 0 && (
+        {history.length > 0 && (
           <div className="mock-history">
             <div className="sheet-label">Последние попытки</div>
-            {state.history.slice(0, 8).map((a, i) => (
+            {history.slice(0, 8).map((a, i) => (
               <div key={i} className={a.passed ? 'history-row ok' : 'history-row bad'}>
                 <span>{a.date}</span>
-                <span>Вариант {a.variantId}</span>
+                <span>{variantTitle(a.variantId)}</span>
                 <span>
                   {a.reading}/25 · {a.language}/25
                 </span>

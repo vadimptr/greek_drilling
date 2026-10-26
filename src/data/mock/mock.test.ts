@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { VARIANTS } from './index'
+import { LEVELS } from '../../types/word'
+import { VARIANTS, variantLevel, variantsFor } from './index'
 
 const unique = (xs: unknown[]) => new Set(xs.map((x) => String(x).trim().toLowerCase())).size === xs.length
 
@@ -9,14 +10,19 @@ describe('VARIANTS', () => {
     expect(new Set(VARIANTS.map((v) => v.id)).size).toBe(VARIANTS.length)
   })
 
-  it('reading part follows the official A1 structure', () => {
+  it('every level has 3 variants', () => {
+    for (const level of LEVELS) expect(variantsFor(level), level).toHaveLength(3)
+  })
+
+  it('reading part follows the official structure, texts grow with the level', () => {
+    const minWords = { A1: 60, A2: 120, B1: 200 }
     for (const v of VARIANTS) {
       expect(v.reading.map((t) => t.type), `variant ${v.id}`).toEqual(['tf', 'match', 'mc', 'gap'])
       const [tf, match, mc, gap] = v.reading
       if (tf.type !== 'tf' || match.type !== 'match' || mc.type !== 'mc' || gap.type !== 'gap') throw new Error('types')
 
       expect(tf.items, `v${v.id} tf`).toHaveLength(7)
-      expect(tf.text.split(/\s+/).length, `v${v.id} tf text length`).toBeGreaterThanOrEqual(60)
+      expect(tf.text.split(/\s+/).length, `v${v.id} tf text length`).toBeGreaterThanOrEqual(minWords[variantLevel(v.id)])
 
       expect(match.lefts, `v${v.id} match lefts`).toHaveLength(6)
       expect(match.rights, `v${v.id} match rights`).toHaveLength(8)

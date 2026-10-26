@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import './App.css'
 import { lessonsUpTo } from './data/grammar'
-import { WORDS } from './data/words'
 import { wordPool } from './data/levels'
+import { variantLevel } from './data/mock'
 import { initialAppState, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
 import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
@@ -68,10 +68,10 @@ export default function App() {
   if (app.tab === 'words') {
     left = { icon: '⚡', value: app.words.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.words.bestStreak, label: 'Лучший стрик' }
-    const pool = wordPool(app.words.level)
+    const pool = wordPool(level)
     const learned = pool.filter((w) => app.words.learned.includes(w.id)).length
     const weak = pool.filter((w) => w.id in app.words.weak).length
-    subtitle = `${app.words.level} · выучено ${learned} / ${pool.length} · слабых ${weak}`
+    subtitle = `${level} · выучено ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'grammar' && grammarSub === 'nouns') {
     left = { icon: '⚡', value: app.nouns.score, label: 'Очки', bump: true }
@@ -93,19 +93,26 @@ export default function App() {
   } else if (app.tab === 'speak') {
     left = { icon: '⚡', value: app.speak.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.speak.bestStreak, label: 'Лучший стрик' }
-    subtitle = `Произнесено ${app.speak.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.speak.weak).length}`
-    progress = app.speak.learned.length / WORDS.length
+    const pool = wordPool(level)
+    const learned = pool.filter((w) => app.speak.learned.includes(w.id)).length
+    const weak = pool.filter((w) => w.id in app.speak.weak).length
+    subtitle = `${level} · произнесено ${learned} / ${pool.length} · слабых ${weak}`
+    progress = learned / pool.length
   } else if (app.tab === 'spell') {
     left = { icon: '⚡', value: app.spell.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.spell.bestStreak, label: 'Лучший стрик' }
-    subtitle = `Написано ${app.spell.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.spell.weak).length}`
-    progress = app.spell.learned.length / WORDS.length
+    const pool = wordPool(level)
+    const learned = pool.filter((w) => app.spell.learned.includes(w.id)).length
+    const weak = pool.filter((w) => w.id in app.spell.weak).length
+    subtitle = `${level} · написано ${learned} / ${pool.length} · слабых ${weak}`
+    progress = learned / pool.length
   } else {
-    const passed = app.mock.history.filter((a) => a.passed).length
-    const best = app.mock.history.reduce((acc, a) => Math.max(acc, a.reading + a.language), 0)
+    const history = app.mock.history.filter((a) => variantLevel(a.variantId) === level)
+    const passed = history.filter((a) => a.passed).length
+    const best = history.reduce((acc, a) => Math.max(acc, a.reading + a.language), 0)
     left = { icon: '🎓', value: `${passed}`, label: 'Сдано попыток' }
-    right = { icon: '🏆', value: app.mock.history.length ? `${Math.round((best / 50) * 100)}%` : '—', label: 'Лучший результат' }
-    subtitle = `Попыток: ${app.mock.history.length}`
+    right = { icon: '🏆', value: history.length ? `${Math.round((best / 50) * 100)}%` : '—', label: 'Лучший результат' }
+    subtitle = `${level} · попыток: ${history.length}`
     progress = null
   }
 
@@ -137,12 +144,12 @@ export default function App() {
           </div>
         )}
         {app.tab === 'speak' && (
-          <SpeakScreen state={app.speak} hint={app.speakHint} onChange={(speak) => setApp((a) => ({ ...a, speak }))} />
+          <SpeakScreen key={level} state={app.speak} hint={app.speakHint} words={wordPool(level)} onChange={(speak) => setApp((a) => ({ ...a, speak }))} />
         )}
         {app.tab === 'spell' && (
-          <SpellScreen state={app.spell} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
+          <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
-        {app.tab === 'mock' && <MockScreen state={app.mock} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
+        {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
       <TabBar tab={app.tab} onChange={setTab} />

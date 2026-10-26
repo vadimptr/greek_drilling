@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { WORDS } from '../data/words'
 import type { SpeakHint } from '../logic/appState'
 import { matchesWord } from '../logic/match'
 import { pickNext } from '../logic/pick'
@@ -23,11 +22,12 @@ const recordingAvailable = canRecord()
 interface Props {
   state: SpeakState
   hint: SpeakHint
+  words: Word[]
   onChange: (next: SpeakState) => void
 }
 
-export function SpeakScreen({ state, hint, onChange }: Props) {
-  const [word, setWord] = useState<Word | null>(() => pickNext(state, WORDS))
+export function SpeakScreen({ state, hint, words, onChange }: Props) {
+  const [word, setWord] = useState<Word | null>(() => pickNext(state, words))
   const [phase, setPhase] = useState<Phase>('idle')
   const [heard, setHeard] = useState('')
   const [level, setLevel] = useState(0)
@@ -48,17 +48,17 @@ export function SpeakScreen({ state, hint, onChange }: Props) {
 
   // сброс прогресса извне: нет слова, но и не победа — подобрать заново
   useEffect(() => {
-    if (word === null && !isWin(state, WORDS)) setWord(pickNext(state, WORDS))
-  }, [state, word])
+    if (word === null && !isWin(state, words)) setWord(pickNext(state, words))
+  }, [state, word, words])
 
   const advance = useCallback(
     (next: SpeakState) => {
       setPhase('idle')
       setHeard('')
       setInfoOpen(false)
-      setWord(pickNext(next, WORDS))
+      setWord(pickNext(next, words))
     },
-    [],
+    [words],
   )
 
   const listen = useCallback(async () => {
@@ -131,7 +131,7 @@ export function SpeakScreen({ state, hint, onChange }: Props) {
     advance(next)
   }
 
-  const won = isWin(state, WORDS)
+  const won = isWin(state, words)
   const micBlocked = mic === 'denied' || mic === 'unsupported'
   const busy = phase === 'listening' || phase === 'processing'
 
@@ -207,7 +207,7 @@ export function SpeakScreen({ state, hint, onChange }: Props) {
       </div>
 
       <WordInfoPopup word={infoOpen && word ? word : null} onClose={() => setInfoOpen(false)} />
-      {won && <WinOverlay total={WORDS.length} bestStreak={state.bestStreak} onRestart={restart} />}
+      {won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}
     </main>
   )
 }
