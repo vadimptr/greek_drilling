@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { LESSON_IDS } from '../data/grammar'
-import { WORDS } from '../data/words'
+import { ALL_WORDS } from '../data/levels'
 import { logout, me, saveProgress, type Session } from './account'
 import {
   APP_STORAGE_KEY,
@@ -44,7 +44,7 @@ function settingsOnly(s: AppState): AppState {
   return {
     ...initialAppState(),
     tab: s.tab,
-    words: initialWords(s.words.direction, s.words.autoSpeak),
+    words: initialWords(s.words.direction, s.words.autoSpeak, s.words.level),
     speakHint: s.speakHint,
     grammarSub: s.grammarSub,
   }
@@ -52,7 +52,7 @@ function settingsOnly(s: AppState): AppState {
 
 export function initialLoad(): { user: string | null; app: AppState } {
   const user = readHint()
-  return { user, app: user ? loadUserCache(localStorage, WORDS, LESSON_IDS) : loadApp(localStorage, WORDS, LESSON_IDS) }
+  return { user, app: user ? loadUserCache(localStorage, ALL_WORDS, LESSON_IDS) : loadApp(localStorage, ALL_WORDS, LESSON_IDS) }
 }
 
 export function useAccount(app: AppState, setApp: Dispatch<SetStateAction<AppState>>, initialUser: string | null) {
@@ -76,7 +76,7 @@ export function useAccount(app: AppState, setApp: Dispatch<SetStateAction<AppSta
 
   const adopt = useCallback(
     (session: Session, local: AppState) => {
-      const remote = parseRemote(session.state, WORDS, LESSON_IDS)
+      const remote = parseRemote(session.state, ALL_WORDS, LESSON_IDS)
       const next = hasProgress(local) ? mergeApp(local, remote) : (remote ?? local)
       synced.current = remote ? serializeApp(remote) : null
       saveApp(localStorage, settingsOnly(local), APP_STORAGE_KEY)
@@ -95,7 +95,7 @@ export function useAccount(app: AppState, setApp: Dispatch<SetStateAction<AppSta
         if (readHint() !== null) {
           writeHint(null)
           setUser(null)
-          setApp(loadApp(localStorage, WORDS, LESSON_IDS))
+          setApp(loadApp(localStorage, ALL_WORDS, LESSON_IDS))
         }
         return
       }
@@ -103,7 +103,7 @@ export function useAccount(app: AppState, setApp: Dispatch<SetStateAction<AppSta
         adopt(r, appRef.current)
         return
       }
-      const remote = parseRemote(r.state, WORDS, LESSON_IDS)
+      const remote = parseRemote(r.state, ALL_WORDS, LESSON_IDS)
       writeHint(r.name)
       setUser(r.name)
       if (remote) {
@@ -143,7 +143,7 @@ export function useAccount(app: AppState, setApp: Dispatch<SetStateAction<AppSta
     writeHint(null)
     synced.current = null
     setUser(null)
-    setApp(loadApp(localStorage, WORDS, LESSON_IDS))
+    setApp(loadApp(localStorage, ALL_WORDS, LESSON_IDS))
   }, [flush, setApp])
 
   return { user, signIn, signOut }

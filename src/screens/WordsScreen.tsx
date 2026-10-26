@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { WORDS } from '../data/words'
+import { wordPool } from '../data/levels'
 import { buildOptions } from '../logic/options'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
@@ -19,9 +19,10 @@ interface Question {
 }
 
 function makeQuestion(state: RoundState): Question | null {
-  const word = pickNext(state, WORDS)
+  const pool = wordPool(state.level)
+  const word = pickNext(state, pool)
   if (!word) return null
-  return { word, options: buildOptions(word, WORDS, state.direction) }
+  return { word, options: buildOptions(word, pool, state.direction) }
 }
 
 const speechAvailable = canSpeak()
@@ -38,6 +39,8 @@ export function WordsScreen({ state, onChange }: Props) {
   const timer = useRef<number | null>(null)
   const interacted = useRef(false)
   const lastDirection = useRef(state.direction)
+  const lastLevel = useRef(state.level)
+  const pool = wordPool(state.level)
 
   useEffect(
     () => () => {
@@ -50,12 +53,22 @@ export function WordsScreen({ state, onChange }: Props) {
   useEffect(() => {
     if (lastDirection.current === state.direction) return
     lastDirection.current = state.direction
-    setQuestion((q) => (q ? { word: q.word, options: buildOptions(q.word, WORDS, state.direction) } : q))
-  }, [state.direction])
+    setQuestion((q) => (q ? { word: q.word, options: buildOptions(q.word, wordPool(state.level), state.direction) } : q))
+  }, [state.direction, state.level])
+
+  useEffect(() => {
+    if (lastLevel.current === state.level) return
+    lastLevel.current = state.level
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+    setFeedback(null)
+    setInfoOpen(false)
+    setQuestion(makeQuestion(state))
+  }, [state])
 
   // сброс прогресса извне: если слово выучено/нет вопроса — переподобрать
   useEffect(() => {
-    if (question === null && !isWin(state, WORDS)) setQuestion(makeQuestion(state))
+    if (question === null && !isWin(state, pool)) setQuestion(makeQuestion(state))
   }, [state, question])
 
   // автоозвучка нового греческого слова (после первого взаимодействия — iOS требует жест)
@@ -96,7 +109,7 @@ export function WordsScreen({ state, onChange }: Props) {
     if (question) speak(question.word.el)
   }
 
-  const won = isWin(state, WORDS)
+  const won = isWin(state, pool)
 
   return (
     <>
@@ -125,7 +138,7 @@ export function WordsScreen({ state, onChange }: Props) {
 
       <WordInfoPopup word={infoOpen && question ? question.word : null} onClose={() => setInfoOpen(false)} />
 
-      {won && !feedback && <WinOverlay total={WORDS.length} bestStreak={state.bestStreak} onRestart={restartRound} />}
+      {won && !feedback && <WinOverlay total={pool.length} bestStreak={state.bestStreak} onRestart={restartRound} />}
     </>
   )
 }

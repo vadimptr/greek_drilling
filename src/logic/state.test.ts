@@ -66,10 +66,18 @@ describe('isWin / restart', () => {
     expect(isWin(s, words)).toBe(true)
   })
 
-  it('restart keeps direction and autoSpeak, clears everything else', () => {
-    let s = initialState('ru-el', false)
+  it('restart keeps direction, autoSpeak and level, clears everything else', () => {
+    let s = initialState('ru-el', false, 'B1')
     s = applyAnswer(s, 1, true)
     const r = restart(s)
-    expect(r).toEqual(initialState('ru-el', false))
+    expect(r).toEqual(initialState('ru-el', false, 'B1'))
+  })
+
+  it('weak words outside the pool do not block the win', () => {
+    let s = applyAnswer(initialState(), 1, true)
+    s = applyAnswer(s, 2, true)
+    s = applyAnswer(s, 3, true)
+    s = applyAnswer(s, 99, false)
+    expect(isWin(s, words)).toBe(true)
   })
 })

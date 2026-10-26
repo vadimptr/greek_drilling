@@ -1,14 +1,17 @@
+import { wordPool } from '../data/levels'
 import type { SpeakHint } from '../logic/appState'
-import type { Direction } from '../types/word'
+import { LEVELS, type Direction, type Level } from '../types/word'
 
 interface Props {
   open: boolean
   direction: Direction
   autoSpeak: boolean
+  level: Level
   canSpeak: boolean
   speakHint: SpeakHint
   onDirection: (d: Direction) => void
   onAutoSpeak: (v: boolean) => void
+  onLevel: (l: Level) => void
   onSpeakHint: (h: SpeakHint) => void
   onReset: () => void
   onClose: () => void
@@ -18,10 +21,12 @@ export function SettingsSheet({
   open,
   direction,
   autoSpeak,
+  level,
   canSpeak,
   speakHint,
   onDirection,
   onAutoSpeak,
+  onLevel,
   onSpeakHint,
   onReset,
   onClose,
@@ -46,6 +51,28 @@ export function SettingsSheet({
           >
             Русский → Ελληνικά
           </button>
+        </div>
+
+        <div className="sheet-label">
+          Слова: уровень {level} · {wordPool(level).length} слов
+        </div>
+        <div className="level-slider">
+          <input
+            type="range"
+            min={0}
+            max={LEVELS.length - 1}
+            step={1}
+            value={LEVELS.indexOf(level)}
+            onChange={(e) => onLevel(LEVELS[Number(e.target.value)])}
+            aria-label="Уровень слов"
+          />
+          <div className="level-ticks">
+            {LEVELS.map((l) => (
+              <button key={l} className={l === level ? 'level-tick level-tick-active' : 'level-tick'} onClick={() => onLevel(l)}>
+                {l}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="sheet-label">Речь: что показывать</div>

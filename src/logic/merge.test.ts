@@ -31,6 +31,7 @@ describe('mergeApp', () => {
       lastId: 7,
       direction: 'ru-el',
       autoSpeak: false,
+      level: 'A1',
     })
   })
 

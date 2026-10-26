@@ -2,11 +2,12 @@ import { useState } from 'react'
 import './App.css'
 import { LESSONS } from './data/grammar'
 import { WORDS } from './data/words'
+import { wordPool } from './data/levels'
 import { initialAppState, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
 import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
-import type { Direction } from './types/word'
+import type { Direction, Level } from './types/word'
 import { Header, type Stat } from './components/Header'
 import { SettingsSheet } from './components/SettingsSheet'
 import { AccountSheet } from './components/AccountSheet'
@@ -42,13 +43,14 @@ export default function App() {
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
   const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
+  const changeLevel = (level: Level) => setApp((a) => ({ ...a, words: { ...a.words, level } }))
   const changeSpeakHint = (speakHint: SpeakHint) => setApp((a) => ({ ...a, speakHint }))
   const setGrammarSub = (grammarSub: GrammarSub) => setApp((a) => ({ ...a, grammarSub }))
   const resetAll = () => {
     setApp((a) => ({
       ...initialAppState(),
       tab: a.tab,
-      words: initialWords(a.words.direction, a.words.autoSpeak),
+      words: initialWords(a.words.direction, a.words.autoSpeak, a.words.level),
       speakHint: a.speakHint,
       grammarSub: a.grammarSub,
     }))
@@ -63,8 +65,11 @@ export default function App() {
   if (app.tab === 'words') {
     left = { icon: '⚡', value: app.words.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.words.bestStreak, label: 'Лучший стрик' }
-    subtitle = `Выучено ${app.words.learned.length} / ${WORDS.length} · слабых ${Object.keys(app.words.weak).length}`
-    progress = app.words.learned.length / WORDS.length
+    const pool = wordPool(app.words.level)
+    const learned = pool.filter((w) => app.words.learned.includes(w.id)).length
+    const weak = pool.filter((w) => w.id in app.words.weak).length
+    subtitle = `${app.words.level} · выучено ${learned} / ${pool.length} · слабых ${weak}`
+    progress = learned / pool.length
   } else if (app.tab === 'grammar' && app.grammarSub === 'nouns') {
     left = { icon: '⚡', value: app.nouns.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.nouns.bestStreak, label: 'Лучший стрик' }
@@ -149,10 +154,12 @@ export default function App() {
         open={settingsOpen}
         direction={app.words.direction}
         autoSpeak={app.words.autoSpeak}
+        level={app.words.level}
         canSpeak={speechAvailable}
         speakHint={app.speakHint}
         onDirection={changeDirection}
         onAutoSpeak={changeAutoSpeak}
+        onLevel={changeLevel}
         onSpeakHint={changeSpeakHint}
         onReset={resetAll}
         onClose={() => setSettingsOpen(false)}

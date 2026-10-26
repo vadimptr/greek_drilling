@@ -1,4 +1,4 @@
-import type { Direction, Word } from '../types/word'
+import type { Direction, Level, Word } from '../types/word'
 
 export const WEAK_REPEATS = 3
 
@@ -14,10 +14,11 @@ export interface Progress {
 export interface RoundState extends Progress {
   direction: Direction
   autoSpeak: boolean
+  level: Level
 }
 
-export function initialState(direction: Direction = 'el-ru', autoSpeak = true): RoundState {
-  return { learned: [], weak: {}, score: 0, bestStreak: 0, lastId: null, direction, autoSpeak }
+export function initialState(direction: Direction = 'el-ru', autoSpeak = true, level: Level = 'A1'): RoundState {
+  return { learned: [], weak: {}, score: 0, bestStreak: 0, lastId: null, direction, autoSpeak, level }
 }
 
 function addUnique(ids: number[], id: number): number[] {
@@ -58,11 +59,10 @@ export function applyAnswer<S extends Progress>(state: S, wordId: number, correc
 }
 
 export function isWin(state: Progress, words: Word[]): boolean {
-  if (Object.keys(state.weak).length > 0) return false
   const learned = new Set(state.learned)
-  return words.every((w) => learned.has(w.id))
+  return words.every((w) => learned.has(w.id) && !(w.id in state.weak))
 }
 
 export function restart(state: RoundState): RoundState {
-  return initialState(state.direction, state.autoSpeak)
+  return initialState(state.direction, state.autoSpeak, state.level)
 }

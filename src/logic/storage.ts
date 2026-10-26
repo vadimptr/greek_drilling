@@ -1,4 +1,4 @@
-import type { Direction, Word } from '../types/word'
+import { LEVELS, type Direction, type Level, type Word } from '../types/word'
 import { initialState, type RoundState } from './state'
 
 export const STORAGE_KEY = 'greek_drilling.v1'
@@ -41,8 +41,9 @@ export function deserialize(raw: string | null, words: Word[]): RoundState {
   const bestStreak = isNonNegInt(obj.bestStreak) ? obj.bestStreak : 0
   const lastId = isNonNegInt(obj.lastId) && known.has(obj.lastId) ? obj.lastId : null
   const autoSpeak = typeof obj.autoSpeak === 'boolean' ? obj.autoSpeak : true
+  const level: Level = LEVELS.find((l) => l === obj.level) ?? 'A1'
 
-  return { learned, weak, score, bestStreak, lastId, direction, autoSpeak }
+  return { learned, weak, score, bestStreak, lastId, direction, autoSpeak, level }
 }
 
 export function loadState(storage: Reader, words: Word[]): RoundState {

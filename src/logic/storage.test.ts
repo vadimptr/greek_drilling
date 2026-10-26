@@ -53,6 +53,13 @@ describe('serialize/deserialize', () => {
     expect(deserialize(raw, words).direction).toBe('el-ru')
   })
 
+  it('level defaults to A1 when missing or unknown and is kept when valid', () => {
+    const { level: _drop, ...legacy } = initialState()
+    expect(deserialize(JSON.stringify(legacy), words).level).toBe('A1')
+    expect(deserialize(JSON.stringify({ ...initialState(), level: 'C2' }), words).level).toBe('A1')
+    expect(deserialize(JSON.stringify(initialState('el-ru', true, 'B1')), words).level).toBe('B1')
+  })
+
   it('autoSpeak defaults to true when missing and is kept when false', () => {
     const { autoSpeak: _drop, ...legacy } = initialState()
     void _drop
