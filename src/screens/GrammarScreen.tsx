@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { LESSONS, lessonById } from '../data/grammar'
+import { lessonById, lessonsUpTo } from '../data/grammar'
 import { abandonLesson, answerLesson, currentQuestionId, startLesson } from '../logic/lesson'
 import type { GrammarState, Lesson } from '../types/grammar'
+import type { Level } from '../types/word'
 import { Exercise, type ExerciseFeedback } from '../components/grammar/Exercise'
 import { LessonExplanation } from '../components/grammar/LessonExplanation'
 import { LessonList } from '../components/grammar/LessonList'
@@ -12,10 +13,12 @@ const CORRECT_DELAY_MS = 600
 
 interface Props {
   state: GrammarState
+  level: Level
   onChange: (next: GrammarState) => void
 }
 
-export function GrammarScreen({ state, onChange }: Props) {
+export function GrammarScreen({ state, level, onChange }: Props) {
+  const lessons = lessonsUpTo(level)
   const [mode, setMode] = useState<Mode>(() => (state.active ? 'exercise' : 'list'))
   const [viewLesson, setViewLesson] = useState<Lesson | null>(null)
   const [feedback, setFeedback] = useState<ExerciseFeedback | null>(null)
@@ -92,7 +95,7 @@ export function GrammarScreen({ state, onChange }: Props) {
     // состояние потеряно (например, урок удалён) — вернуться к списку
     return (
       <LessonList
-        lessons={LESSONS}
+        lessons={lessons}
         completed={state.completed}
         activeLessonId={null}
         onOpen={openLesson}
@@ -104,7 +107,7 @@ export function GrammarScreen({ state, onChange }: Props) {
   if (mode === 'list') {
     return (
       <LessonList
-        lessons={LESSONS}
+        lessons={lessons}
         completed={state.completed}
         activeLessonId={state.active?.lessonId ?? null}
         onOpen={openLesson}
@@ -126,7 +129,7 @@ export function GrammarScreen({ state, onChange }: Props) {
   }
 
   if (mode === 'done' && doneLesson) {
-    const nextLesson = LESSONS.find((l) => l.id === doneLesson.id + 1)
+    const nextLesson = lessons.find((l) => l.id === doneLesson.id + 1)
     return (
       <main className="done">
         <div className="done-emoji">🎯</div>

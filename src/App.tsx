@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './App.css'
-import { LESSONS } from './data/grammar'
+import { lessonsUpTo } from './data/grammar'
 import { WORDS } from './data/words'
 import { wordPool } from './data/levels'
 import { initialAppState, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
@@ -20,7 +20,7 @@ import { SpellScreen } from './screens/SpellScreen'
 import { NounsScreen } from './screens/NounsScreen'
 import { AoristScreen } from './screens/AoristScreen'
 import { AORIST_VERBS } from './data/aorist'
-import { SubPicker } from './components/grammar/SubPicker'
+import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 
 const speechAvailable = canSpeak()
@@ -57,6 +57,9 @@ export default function App() {
     setSettingsOpen(false)
   }
 
+  const level = app.words.level
+  const grammarSub = subsFor(level).some((s) => s.id === app.grammarSub) ? app.grammarSub : 'lessons'
+
   let left: Stat
   let right: Stat
   let subtitle: string
@@ -70,12 +73,12 @@ export default function App() {
     const weak = pool.filter((w) => w.id in app.words.weak).length
     subtitle = `${app.words.level} · выучено ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
-  } else if (app.tab === 'grammar' && app.grammarSub === 'nouns') {
+  } else if (app.tab === 'grammar' && grammarSub === 'nouns') {
     left = { icon: '⚡', value: app.nouns.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.nouns.bestStreak, label: 'Лучший стрик' }
     subtitle = `Склонение: усвоено ${app.nouns.learned.length} / ${NOUNS.length} · слабых ${Object.keys(app.nouns.weak).length}`
     progress = app.nouns.learned.length / NOUNS.length
-  } else if (app.tab === 'grammar' && app.grammarSub === 'aorist') {
+  } else if (app.tab === 'grammar' && grammarSub === 'aorist') {
     left = { icon: '⚡', value: app.aorist.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.aorist.bestStreak, label: 'Лучший стрик' }
     subtitle = `Аорист: усвоено ${app.aorist.learned.length} / ${AORIST_VERBS.length} · слабых ${Object.keys(app.aorist.weak).length}`
@@ -83,8 +86,10 @@ export default function App() {
   } else if (app.tab === 'grammar') {
     left = { icon: '⚡', value: app.grammar.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.grammar.bestStreak, label: 'Лучший стрик' }
-    subtitle = `Уроков пройдено ${app.grammar.completed.length} / ${LESSONS.length}`
-    progress = app.grammar.completed.length / LESSONS.length
+    const lessons = lessonsUpTo(level)
+    const passed = lessons.filter((l) => app.grammar.completed.includes(l.id)).length
+    subtitle = `${level} · уроков пройдено ${passed} / ${lessons.length}`
+    progress = passed / lessons.length
   } else if (app.tab === 'speak') {
     left = { icon: '⚡', value: app.speak.score, label: 'Очки', bump: true }
     right = { icon: '🏆', value: app.speak.bestStreak, label: 'Лучший стрик' }
@@ -117,15 +122,15 @@ export default function App() {
         )}
         {app.tab === 'grammar' && (
           <div className="grammar-hub">
-            <SubPicker value={app.grammarSub} onChange={setGrammarSub} />
+            <SubPicker value={grammarSub} level={level} onChange={setGrammarSub} />
             <div className="hub-body">
-              {app.grammarSub === 'lessons' && (
-                <GrammarScreen state={app.grammar} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
+              {grammarSub === 'lessons' && (
+                <GrammarScreen state={app.grammar} level={level} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
               )}
-              {app.grammarSub === 'nouns' && (
+              {grammarSub === 'nouns' && (
                 <NounsScreen state={app.nouns} onChange={(nouns) => setApp((a) => ({ ...a, nouns }))} />
               )}
-              {app.grammarSub === 'aorist' && (
+              {grammarSub === 'aorist' && (
                 <AoristScreen state={app.aorist} onChange={(aorist) => setApp((a) => ({ ...a, aorist }))} />
               )}
             </div>

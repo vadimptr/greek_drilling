@@ -1,3 +1,4 @@
+import { lessonsUpTo } from '../data/grammar'
 import { wordPool } from '../data/levels'
 import type { SpeakHint } from '../logic/appState'
 import { LEVELS, type Direction, type Level } from '../types/word'
@@ -54,7 +55,7 @@ export function SettingsSheet({
         </div>
 
         <div className="sheet-label">
-          Слова: уровень {level} · {wordPool(level).length} слов
+          Уровень {level}: {wordPool(level).length} слов, {lessonsUpTo(level).length} уроков грамматики
         </div>
         <div className="level-slider">
           <input
@@ -64,7 +65,7 @@ export function SettingsSheet({
             step={1}
             value={LEVELS.indexOf(level)}
             onChange={(e) => onLevel(LEVELS[Number(e.target.value)])}
-            aria-label="Уровень слов"
+            aria-label="Уровень"
           />
           <div className="level-ticks">
             {LEVELS.map((l) => (
