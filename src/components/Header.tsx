@@ -13,11 +13,11 @@ interface Props {
   /** 0..1 или null, если полоса не нужна */
   progress: number | null
   onSettings: () => void
-  signedIn: boolean
+  user: string | null
   onAccount: () => void
 }
 
-export function Header({ left, right, subtitle, progress, onSettings, signedIn, onAccount }: Props) {
+export function Header({ left, right, subtitle, progress, onSettings, user, onAccount }: Props) {
   const pct = progress === null ? 0 : Math.round(Math.min(1, Math.max(0, progress)) * 100)
   return (
     <header className="header">
@@ -32,9 +32,10 @@ export function Header({ left, right, subtitle, progress, onSettings, signedIn, 
           <span className="stat-icon">{right.icon}</span>
           <span className="stat-value">{right.value}</span>
         </div>
-        {signedIn ? (
-          <button className="icon-btn" onClick={onAccount} aria-label="Аккаунт">
-            👤
+        {user !== null ? (
+          <button className="icon-btn user-btn" onClick={onAccount} aria-label={`Аккаунт: ${user}`}>
+            <span className="user-btn-icon">👤</span>
+            <span className="user-btn-name">{user}</span>
           </button>
         ) : (
           <button className="icon-btn login-btn" onClick={onAccount}>

@@ -668,6 +668,9 @@
 .account-error { color: var(--bad); font-size: 14px; }
 .primary-btn:disabled, .secondary-btn:disabled { opacity: 0.5; }
 .login-btn { width: auto; padding: 0 12px; font-size: 15px; font-weight: 600; color: var(--accent); }
+.user-btn { width: auto; max-width: 140px; padding: 0 10px; display: flex; align-items: center; gap: 6px; }
+.user-btn-icon { font-size: 18px; flex: none; }
+.user-btn-name { font-size: 15px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* aorist section */
 .hub-body > .aorist { flex: 1; }

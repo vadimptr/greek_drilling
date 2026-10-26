@@ -102,7 +102,7 @@ export default function App() {
   return (
     <div className="app">
       <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)}
-        signedIn={account.user !== null}
+        user={account.user}
         onAccount={() => setAccountOpen(true)}
       />
 
