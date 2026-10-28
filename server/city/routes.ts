@@ -7,6 +7,7 @@ import { issue, readCookie, verify } from '../session.ts'
 import { timingSafeEqual } from 'node:crypto'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
+import { createPool, hourOffset, takeFromPool, touchDemand } from './pool.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, timeOfDay, type Level, type Mood } from './scenario.ts'
 import {
@@ -18,6 +19,8 @@ export interface CityDeps {
   allowedUsers: string[]
   dailyTalks: number
   dailyStories?: number
+  poolSize?: number
+  poolIntervalMs?: number
   scenarios: ScenarioGenerator | null
   facts: FactMatcher | null
   translator: Translator | null
@@ -199,6 +202,12 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
   }
 
   const storyTiming = new Timing(40_000)
+  const pool = createPool(db, { scenarios: deps.scenarios, scenes: deps.scenes, ambience: deps.ambience, size: deps.poolSize ?? 0 })
+  if (deps.poolIntervalMs) {
+    const timer = setInterval(() => void pool.refill(), deps.poolIntervalMs)
+    timer.unref()
+    setTimeout(() => void pool.refill(), 5_000).unref()
+  }
   const greekFilled = new Set<string>()
   const ensureGreek = async (game: Game) => {
     const s = game.scenario
@@ -302,12 +311,19 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
       if (storiesSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= (deps.dailyStories ?? 15)) {
         throw new HttpError(429, 'На сегодня новых историй достаточно, приходи завтра')
       }
-      const startedAt = Date.now()
       const hour = typeof body.hour === 'number' && body.hour >= 0 && body.hour < 24 ? Math.floor(body.hour) : null
-      const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), hour === null ? undefined : timeOfDay(hour)).catch(providerFailure)
-      storyTiming.record(Date.now() - startedAt)
+      const time = hour === null ? undefined : timeOfDay(hour)
+      if (hour !== null) touchDemand(db, level, hourOffset(hour, new Date().getHours()))
+      const pooled = time ? takeFromPool(db, { level, time }) : null
+      let scenario = pooled?.scenario
+      if (!scenario) {
+        const startedAt = Date.now()
+        scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), time).catch(providerFailure)
+        storyTiming.record(Date.now() - startedAt)
+      }
       abandonActive(db, u.id)
-      const game = createGame(db, u.id, level, scenario)
+      const game = createGame(db, u.id, level, scenario, pooled?.id)
+      void pool.refill()
       recordStory(db, u.id)
       void deps.scenes?.ensureAll(game.id, scenario)
       void deps.ambience?.ensureMany(scenario.characters.map(ambienceOf))

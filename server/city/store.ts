@@ -61,6 +61,19 @@ export function migrateCity(db: DatabaseSync): void {
       issues TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS city_pool (
+      id TEXT PRIMARY KEY,
+      level TEXT NOT NULL,
+      time TEXT NOT NULL,
+      scenario TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS city_demand (
+      level TEXT NOT NULL,
+      offset INTEGER NOT NULL,
+      last_at TEXT NOT NULL,
+      PRIMARY KEY (level, offset)
+    );
     CREATE TABLE IF NOT EXISTS city_story_log (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -97,8 +110,8 @@ const toGame = (r: GameRow): Game => ({
 
 const now = () => new Date().toISOString()
 
-export function createGame(db: DatabaseSync, userId: number, level: Level, scenario: Scenario): Game {
-  const id = randomBytes(9).toString('base64url')
+export function createGame(db: DatabaseSync, userId: number, level: Level, scenario: Scenario, presetId?: string): Game {
+  const id = presetId ?? randomBytes(9).toString('base64url')
   const t = now()
   db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, userId, level, JSON.stringify(scenario), t, t,

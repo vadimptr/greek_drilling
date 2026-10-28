@@ -514,3 +514,57 @@ test('resuming after a silence pause continues the same talk without counting it
   assert.equal(buildPersona(s, 'eleni', 'A1', { met: ['eleni'], cameFrom: null, mood: 'friendly', previous: [], resume: 'tap' }).firstMessage, 'Ναι;')
   await close()
 })
+
+test('story pool: demand-driven refill per level and time of day, instant claim with the pre-drawn scene', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { SceneStore } = await import('./images.ts')
+  const { createPool, hourOffset, poolTargets, poolCount } = await import('./pool.ts')
+  assert.equal(hourOffset(23, 1), -2)
+  assert.equal(hourOffset(1, 23), 2)
+  assert.equal(hourOffset(10, 10), 0)
+  let generated = 0
+  const scenarios = { generate: async (_l: string, _r: string[], time?: string) => { generated++; const s = validateScenario(scenario()); s.time_of_day = time as never; return s } }
+  const drawn: string[] = []
+  const scenes = new SceneStore(mkdtempSync(`${tmpdir()}/pool-`), { id: 'f', generate: async (p) => { drawn.push(p); return Buffer.from('png') } })
+  const { call, login, close, db } = await startWithDb({ scenarios, scenes, poolSize: 1 })
+  const me = await login('Vadim')
+  const hour = new Date().getHours()
+  const first = await call('POST', '/api/city/games', { level: 'A1', hour }, me)
+  assert.equal(first.status, 201)
+  await new Promise((r) => setTimeout(r, 80))
+  const targets = poolTargets(db, new Date())
+  assert.ok(targets.some((t) => t.level === 'A1'))
+  for (const t of targets) assert.equal(poolCount(db, t), 1)
+  const before = generated
+  const second = await call('POST', '/api/city/games', { level: 'A1', hour }, me)
+  assert.equal(second.status, 201)
+  assert.equal(second.body.game.characters.find((c: { id: string }) => c.id === 'eleni').scene, `/api/city/games/${second.body.game.id}/scenes/eleni`)
+  assert.ok(generated <= before + targets.length)
+  await new Promise((r) => setTimeout(r, 80))
+  for (const t of poolTargets(db, new Date())) assert.equal(poolCount(db, t), 1)
+  const idle = createPool(db, { scenarios, scenes: null, size: 0 })
+  const g0 = generated
+  await idle.refill()
+  assert.equal(generated, g0)
+  await close()
+})
+
+async function startWithDb(overrides: Partial<CityDeps>) {
+  const db = openDb(':memory:')
+  const deps: CityDeps = { allowedUsers: ['Vadim'], dailyTalks: 10, scenarios: null, facts: null, translator: null, voice: null, scenes: null, ...overrides }
+  const server = createServer(createApp(db, SECRET, deps))
+  await new Promise<void>((r) => server.listen(0, r))
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+  const call = async (method: string, path: string, body?: unknown, cookie?: string) => {
+    const res = await fetch(base + path, {
+      method,
+      headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const text = await res.text()
+    return { status: res.status, body: text ? JSON.parse(text) : null, cookie: (res.headers.get('set-cookie') ?? '').split(';')[0] }
+  }
+  const login = async (name: string) => (await call('POST', '/api/enter', { name, create: true })).cookie
+  return { call, login, db, close: () => new Promise((r) => server.close(r)) }
+}
