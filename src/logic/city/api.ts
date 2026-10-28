@@ -133,6 +133,8 @@ export interface LevelCheck {
 
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
   call<{ game: CityGame; check: LevelCheck | null }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines })
+export const introduce = (gameId: string, characterId: string, target: string) =>
+  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/introduce`, { characterId, target }).then((r) => r.game)
 export const requestScene = (gameId: string, characterId: string) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/scene`, { characterId }).then((r) => r.game)
 export const setMood = (gameId: string, characterId: string, mood: string, reason: string) =>

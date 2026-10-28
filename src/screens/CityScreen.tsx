@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, requestScene, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, introduce, newGame, requestScene, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
@@ -73,6 +73,8 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
   const modeRef = useRef<'speaking' | 'listening'>('listening')
   const pendingRef = useRef<string | null>(null)
   const walkAwayRef = useRef(false)
+  const endingRef = useRef(false)
+  const lastSpokeRef = useRef<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const wonRef = useRef(false)
   const timerRef = useRef<number | undefined>(undefined)
@@ -169,6 +171,10 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       const who = g?.notebook.find((p) => p.id === from)
       setNotice(`${who?.name ?? 'Собеседник'} не хочет больше с тобой разговаривать`)
     }
+    endingRef.current = false
+    lastSpokeRef.current = from
+    currentRef.current = null
+    setCharacter(null)
     if (wonRef.current) {
       setPhase('won')
     } else if (target && g) {
@@ -190,7 +196,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       if (seq !== callSeq.current) return
       modeRef.current = mode
       setSpeaking(mode === 'speaking')
-      if (!pendingRef.current && !walkAwayRef.current) return
+      if (!pendingRef.current && !walkAwayRef.current && !endingRef.current) return
       if (mode === 'speaking') window.clearTimeout(timerRef.current)
       else scheduleLeave(LEAVE_AFTER_SPEECH_MS)
     },
@@ -198,10 +204,13 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       const g = gameRef.current
       const current = currentRef.current
       if (seq !== callSeq.current || !g || !current) return 'not available'
-      if (name === 'go_to') {
+      if (name === 'introduce' || name === 'go_to') {
         const target = String(params.character_id ?? '')
-        if (target === current || !g.characters.some((c) => c.id === target)) return 'unknown person'
-        pendingRef.current = target
+        if (target && target !== current) void introduce(g.id, current, target).then(applyIfCurrent).catch(() => undefined)
+        if (name === 'introduce') return 'ok'
+      }
+      if (name === 'end_talk' || name === 'go_to') {
+        endingRef.current = true
         scheduleLeave(modeRef.current === 'listening' ? LEAVE_IF_SILENT_MS : 15_000)
         return 'ok'
       }
@@ -306,6 +315,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
     setCharacter(null)
     setLines([])
     currentRef.current = null
+    lastSpokeRef.current = null
     wonRef.current = false
     gameRef.current = null
     setGame(null)
@@ -335,7 +345,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       void startNew()
       return
     }
-    void connectTo(g, currentRef.current ?? g.startId, null)
+    if (g.met.length === 0) void connectTo(g, g.startId, null)
   }
 
   const approach = (id: string) => {
@@ -345,7 +355,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       pendingRef.current = id
       leave()
     } else if (phase === 'idle') {
-      void connectTo(g, id, currentRef.current)
+      void connectTo(g, id, lastSpokeRef.current)
     }
   }
 
@@ -368,7 +378,8 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
 
   const sceneOf = (id: string | null | undefined) => (id ? (game?.characters.find((c) => c.id === id)?.scene ?? null) : null)
-  const shownId = phase === 'painting' ? paintingId : (character?.id ?? (active ? game?.startId : null))
+  const shownId = phase === 'painting' ? paintingId : (character?.id ?? (active && game?.met.length === 0 ? game.startId : null))
+  const choosing = !!active && phase === 'idle' && !character && (game?.met.length ?? 0) > 0
   const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
   const sceneState = phase === 'generating' || phase === 'walking' || scene ? null : game?.characters.find((c) => c.id === shownId)?.sceneState
   const soundOn = phase === 'painting' || phase === 'connecting' || phase === 'talking' || (phase === 'idle' && !!character) || phase === 'won'
@@ -422,7 +433,9 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
                 {!allowed
                   ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
                   : active
-                    ? 'Нажми на микрофон, чтобы продолжить'
+                    ? choosing
+                      ? 'Ты отошёл от собеседника. Выбери в блокноте, к кому подойти'
+                      : 'Нажми на микрофон, чтобы подойти к первому человеку'
                     : `Нажми на микрофон — и ты сойдёшь с парома в ${CITY_NAME}`}
               </div>
             )}
@@ -495,7 +508,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
             <button
               className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
               onClick={onMic}
-              disabled={busy || !allowed}
+              disabled={busy || !allowed || choosing}
               aria-label={phase === 'talking' ? 'Закончить разговор' : 'Начать разговор'}
             >
               {busy ? '…' : phase === 'talking' ? '■' : '🎤'}

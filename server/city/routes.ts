@@ -6,7 +6,7 @@ import { HttpError, readJson, send } from '../http.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
-import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
+import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood } from './scenario.ts'
 import {
   abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
@@ -45,23 +45,9 @@ function notebookIds(game: Game): string[] {
 }
 
 function reachable(game: Game): Set<string> {
-  const ids = new Set(notebookIds(game))
-  for (const id of game.met) game.scenario.characters.find((c) => c.id === id)?.refers_to.forEach((r) => ids.add(r))
-  return ids
+  return new Set(notebookIds(game))
 }
 
-const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-
-export function mentioned(s: Scenario, text: string): string[] {
-  const t = fold(text)
-  return s.characters
-    .filter((c) => {
-      const name = fold(c.name_el)
-      const stem = name.slice(0, Math.max(4, name.length - 2))
-      return new RegExp(`(^|[^\\p{L}])${stem}`, 'u').test(t)
-    })
-    .map((c) => c.id)
-}
 
 export function score(game: Game): number {
   return factsOf(game.scenario)
@@ -171,7 +157,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     throw new HttpError(502, e instanceof ProviderError ? 'Сервис ИИ сейчас недоступен, попробуй ещё раз' : 'Ошибка сервиса ИИ')
   }
 
-  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|scene|complete)$/
+  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|scene|introduce|complete)$/
 
   const translations = new Map<string, string>()
   const translate = async (text: string): Promise<string> => {
@@ -335,8 +321,6 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         .map((l) => ({ role: l.role, text: stripTags(l.text).slice(0, MAX_LINE) }))
         .filter((l) => l.text)
       addLines(db, game, characterId, lines)
-      const said = lines.filter((l) => l.role === 'agent').map((l) => l.text).join(' ')
-      addHeard(db, game, mentioned(game.scenario, said).filter((id) => id !== characterId))
       const open = tellableBy(game.scenario, characterId).filter((f) => !game.found.includes(f.id))
       const agentLines = lines.filter((l) => l.role === 'agent').map((l) => l.text)
       const matching =
@@ -366,6 +350,14 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
           : Promise.resolve(null)
       const [, check] = await Promise.all([matching, checking])
       send(res, 200, { game: view(game), check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) } })
+      return true
+    }
+
+    if (m[2] === 'introduce') {
+      if (!game.met.includes(characterId)) throw new HttpError(409, 'С этим жителем ты ещё не говорил')
+      const target = typeof body.target === 'string' ? body.target : ''
+      if (character.refers_to.includes(target)) addHeard(db, game, [target])
+      send(res, 200, { game: view(game) })
       return true
     }
 

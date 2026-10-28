@@ -7,7 +7,7 @@ import { openDb } from '../db.ts'
 import { dropModeratedVoices, elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
 import type { CityDeps } from './routes.ts'
 import { buildPersona, validateScenario, type Fact, type Scenario } from './scenario.ts'
-import { leaderboard, mentioned, stripTags } from './routes.ts'
+import { leaderboard, stripTags } from './routes.ts'
 import type { Game } from './store.ts'
 
 const SECRET = 'test-secret-0123456789'
@@ -100,11 +100,15 @@ test('game flow: start character, referral chain, completion only by the solver'
   assert.equal(first.status, 200)
   assert.deepEqual(first.body.character, { id: 'eleni', name: 'Ελένη', nameRu: 'Элени', role: 'племянница рыбака', roleRu: 'племянница рыбака', place: 'πλατεία', placeRu: 'площадь' })
   assert.deepEqual(first.body.session, { provider: 'fake', connection: { token: 't' } })
-  assert.deepEqual(first.body.game.known.sort(), ['eleni', 'kostas'])
+  assert.deepEqual(first.body.game.known, ['eleni'])
+  assert.equal((await talk('kostas', 'eleni')).status, 409)
+  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)
   assert.equal((await talk('kostas', 'eleni')).status, 200)
   assert.match(opened[1], /just come to you after talking to Ελένη/)
 
   assert.equal((await call('POST', `/api/city/games/${game.id}/complete`, { characterId: 'kostas' }, me)).status, 409)
+  assert.equal((await talk('yiannis', 'kostas')).status, 409)
+  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'kostas', target: 'yiannis' }, me)
   assert.equal((await talk('yiannis', 'kostas')).status, 200)
   assert.match(opened[2], /call the tool goal_completed/)
   assert.equal((await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'user', text: 'Γεια' }] }, me)).status, 200)
@@ -223,15 +227,20 @@ test('scenario validation cleans facts', () => {
   assert.deepEqual(s.facts.find((f) => f.id === 'f4')!.known_by, ['yiannis', 'eleni'])
 })
 
-test('names heard in conversation appear in the notebook; moods persist and shape the next meeting', async () => {
+test('people appear in the notebook only when introduced; moods persist and shape the next meeting', async () => {
   const { call, login, opened, close } = await start({ facts: null })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  const heard = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
+  const said = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
     { role: 'user', text: 'Πού είναι ο Γιάννης;' },
     { role: 'agent', text: 'Ρώτα τον κύριο Κώστα στο καφενείο.' },
   ] }, me)).body.game
+  assert.deepEqual(said.notebook.map((p: { id: string }) => p.id), ['eleni'])
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas' }, me)).status, 409)
+  const stranger = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'yiannis' }, me)).body.game
+  assert.deepEqual(stranger.notebook.map((p: { id: string }) => p.id), ['eleni'])
+  const heard = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)).body.game
   assert.deepEqual(heard.notebook.map((p: { id: string }) => p.id), ['eleni', 'kostas'])
 
   assert.equal((await call('POST', `/api/city/games/${game.id}/mood`, { characterId: 'eleni', mood: 'furious' }, me)).status, 400)
@@ -244,13 +253,6 @@ test('names heard in conversation appear in the notebook; moods persist and shap
   assert.match(opened[1], /already talked to this tourist earlier/)
   assert.match(opened[1], /Tourist: Πού είναι ο Γιάννης;/)
   await close()
-})
-
-test('greek names are found in any case form', () => {
-  const s = validateScenario(scenario())
-  assert.deepEqual(mentioned(s, 'Πήγαινε στον Γιάννη, στο λιμάνι'), ['yiannis'])
-  assert.deepEqual(mentioned(s, 'Η ΕΛΈΝΗ και ο κυρ Κώστας'), ['eleni', 'kostas'])
-  assert.deepEqual(mentioned(s, 'Καλημέρα'), [])
 })
 
 test('translation is cached and only for allowed users', async () => {
@@ -416,6 +418,7 @@ test('residents remember only their own talk within one story, nobody remembers 
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
   await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [{ role: 'user', text: 'Με λένε Βαδίμ' }] }, me)
+  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
   assert.doesNotMatch(opened[1], /Βαδίμ/)
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
