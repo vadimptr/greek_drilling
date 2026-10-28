@@ -24,6 +24,7 @@ import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 import { CityScreen } from './screens/CityScreen'
 import { cityAccess } from './logic/city/api'
+import { CITY_NAME, CITY_PATH } from './logic/city/name'
 
 const speechAvailable = canSpeak()
 
@@ -33,6 +34,10 @@ export default function App() {
   const [app, setApp] = useState<AppState>(() => {
     const loaded = boot.app
     // ?tab=grammar|mock|words|speak|spell — открыть нужную вкладку по ссылке
+    if (window.location.pathname === CITY_PATH) {
+      window.history.replaceState(null, '', '/' + window.location.hash)
+      return { ...loaded, tab: 'city' }
+    }
     const param = new URLSearchParams(window.location.search).get('tab')
     const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock', 'city']
     const tab = tabs.find((t) => t === param) ?? null
@@ -41,23 +46,20 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const account = useAccount(app, setApp, boot.user)
-  const [city, setCity] = useState<string | null | undefined>(undefined)
+  const [cityAllowed, setCityAllowed] = useState<boolean | null>(null)
 
   useEffect(() => {
     let alive = true
     if (!account.user) {
-      setCity(null)
+      setCityAllowed(false)
       return
     }
-    cityAccess().then((r) => alive && setCity(r.allowed ? r.city : null))
+    setCityAllowed(null)
+    cityAccess().then((r) => alive && setCityAllowed(r.allowed))
     return () => {
       alive = false
     }
   }, [account.user])
-
-  useEffect(() => {
-    if (city === null && app.tab === 'city') setApp((a) => ({ ...a, tab: 'words' }))
-  }, [city, app.tab])
 
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
@@ -126,9 +128,9 @@ export default function App() {
     subtitle = `${level} · написано ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'city') {
-    left = { icon: '🌊', value: city ?? '…', label: 'Город' }
+    left = { icon: '🌊', value: CITY_NAME, label: 'Город' }
     right = { icon: '🗣️', value: level, label: 'Уровень' }
-    subtitle = `${city ?? ''} · жители говорят на уровне ${level}`
+    subtitle = `${CITY_NAME} · жители говорят на уровне ${level}`
     progress = null
   } else {
     const history = app.mock.history.filter((a) => variantLevel(a.variantId) === level)
@@ -173,11 +175,13 @@ export default function App() {
         {app.tab === 'spell' && (
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
-        {app.tab === 'city' && city && <CityScreen city={city} level={level} />}
+        {app.tab === 'city' && (
+          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} onSignIn={() => setAccountOpen(true)} />
+        )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
-      <TabBar tab={app.tab} city={city ?? null} onChange={setTab} />
+      <TabBar tab={app.tab} onChange={setTab} />
 
       <AccountSheet
         open={accountOpen}

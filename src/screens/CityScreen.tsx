@@ -2,14 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import {
   completeGame, currentGame, newGame, saveLines, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
+import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
 
 type Phase = 'loading' | 'idle' | 'generating' | 'connecting' | 'talking' | 'walking' | 'won'
 
 interface Props {
-  city: string
+  allowed: boolean | null
+  signedIn: boolean
   level: Level
+  onSignIn: () => void
 }
 
 const SUBS_KEY = 'greek_drilling.city.subs'
@@ -31,7 +34,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ city, level }: Props) {
+export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -56,6 +59,10 @@ export function CityScreen({ city, level }: Props) {
   }
 
   useEffect(() => {
+    if (!allowed) {
+      setPhase(allowed === null ? 'loading' : 'idle')
+      return
+    }
     let alive = true
     currentGame()
       .then((g) => {
@@ -74,7 +81,7 @@ export function CityScreen({ city, level }: Props) {
       callSeq.current++
       void callRef.current?.end()
     }
-  }, [])
+  }, [allowed])
 
   const toggleSubs = () => {
     const next = !subs
@@ -236,7 +243,11 @@ export function CityScreen({ city, level }: Props) {
         )}
         {phase === 'idle' && !character && (
           <div className="city-hint">
-            {active ? 'Нажми на микрофон, чтобы продолжить' : `Нажми на микрофон — и ты сойдёшь с парома в ${city}`}
+            {!allowed
+              ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
+              : active
+                ? 'Нажми на микрофон, чтобы продолжить'
+                : `Нажми на микрофон — и ты сойдёшь с парома в ${CITY_NAME}`}
           </div>
         )}
         {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
@@ -255,7 +266,7 @@ export function CityScreen({ city, level }: Props) {
         <button
           className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
           onClick={onMic}
-          disabled={busy}
+          disabled={busy || !allowed}
           aria-label={phase === 'talking' ? 'Закончить разговор' : 'Начать разговор'}
         >
           {busy ? '…' : phase === 'talking' ? '■' : '🎤'}
@@ -268,6 +279,15 @@ export function CityScreen({ city, level }: Props) {
           {!error && phase === 'connecting' && 'Подхожу…'}
           {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
           {!error && phase === 'won' && 'Нажми на микрофон — будет новое задание'}
+          {allowed === false && !signedIn && (
+            <>
+              Разговоры с жителями доступны по приглашению.{' '}
+              <button className="link-btn" onClick={onSignIn}>
+                Войти
+              </button>
+            </>
+          )}
+          {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
         </div>
         {phase === 'idle' && known.length > 0 && (
           <div className="city-people">
@@ -280,9 +300,11 @@ export function CityScreen({ city, level }: Props) {
           </div>
         )}
         <div className="speak-actions">
-          <button className="secondary-btn" onClick={toggleSubs}>
-            {subs ? 'Скрыть субтитры' : 'Субтитры'}
-          </button>
+          {allowed && (
+            <button className="secondary-btn" onClick={toggleSubs}>
+              {subs ? 'Скрыть субтитры' : 'Субтитры'}
+            </button>
+          )}
           {phase === 'idle' && active && (
             <button className="secondary-btn" onClick={() => void startNew()}>
               Другое задание

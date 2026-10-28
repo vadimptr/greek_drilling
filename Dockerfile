@@ -18,6 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY server ./server
 COPY src/logic/name.ts ./src/logic/name.ts
+COPY src/logic/city/name.ts ./src/logic/city/name.ts
 
 ENV PORT=3000 DB_PATH=/data/gd.db NODE_ENV=production
 RUN mkdir -p /data && chown node:node /data

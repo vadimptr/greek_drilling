@@ -1,4 +1,6 @@
-export const CITY_NAME = 'Μυθόπολη'
+import { CITY_NAME } from '../../src/logic/city/name.ts'
+
+export { CITY_NAME }
 
 export type Gender = 'male' | 'female'
 export type Age = 'young' | 'middle' | 'old'

@@ -526,6 +526,7 @@
 .speak-actions .secondary-btn, .speak-actions .primary-btn { flex: 1; }
 
 /* city section */
+.city .mic-btn:disabled { background: var(--muted); opacity: 0.35; }
 .city-scene { gap: 10px; }
 .city-hint { font-size: 18px; color: var(--muted); line-height: 1.4; padding: 0 12px; }
 .city-name { font-size: clamp(28px, 8vw, 38px); font-weight: 700; transition: color 0.2s; }

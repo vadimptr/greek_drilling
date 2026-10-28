@@ -1,8 +1,8 @@
 import type { Tab } from '../logic/appState'
+import { CITY_NAME } from '../logic/city/name'
 
 interface Props {
   tab: Tab
-  city: string | null
   onChange: (tab: Tab) => void
 }
 
@@ -12,13 +12,13 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'speak', icon: '🎤', label: 'Речь' },
   { id: 'spell', icon: '✍️', label: 'Письмо' },
   { id: 'mock', icon: '📝', label: 'Тест' },
+  { id: 'city', icon: '🌊', label: CITY_NAME },
 ]
 
-export function TabBar({ tab, city, onChange }: Props) {
-  const tabs = city ? [...TABS, { id: 'city' as Tab, icon: '🌊', label: city }] : TABS
+export function TabBar({ tab, onChange }: Props) {
   return (
     <nav className="tabbar" aria-label="Разделы">
-      {tabs.map((t) => (
+      {TABS.map((t) => (
         <button
           key={t.id}
           className={t.id === tab ? 'tab tab-active' : 'tab'}
