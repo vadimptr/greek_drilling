@@ -4,6 +4,7 @@ import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
+import { ambienceOf, type AmbienceStore } from './ambience.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
@@ -20,6 +21,7 @@ export interface CityDeps {
   levels?: LevelChecker | null
   voice: VoiceProvider | null
   scenes: SceneStore | null
+  ambience?: AmbienceStore | null
 }
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1']
@@ -89,7 +91,7 @@ function notebook(game: Game) {
   })
 }
 
-function publicGame(game: Game, scenes: SceneStore | null) {
+function publicGame(game: Game, scenes: SceneStore | null, ambience: AmbienceStore | null) {
   const s = game.scenario
   const sceneUrl = (id: string) => (scenes?.has(game.id, id) ? `/api/city/games/${game.id}/scenes/${id}` : null)
   return {
@@ -108,6 +110,7 @@ function publicGame(game: Game, scenes: SceneStore | null) {
       ...card(c),
       scene: sceneUrl(c.id),
       sceneState: scenes ? scenes.status(game.id, c.id) : { state: 'none' },
+      ambience: ambience?.has(ambienceOf(c)) ? `/api/city/ambience/${ambienceOf(c)}` : null,
     })),
   }
 }
@@ -198,7 +201,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
   }
 
   const totalScore = (userId: number) => allGames(db, userId).reduce((sum, g) => sum + score(g), 0)
-  const view = (game: Game) => ({ ...publicGame(game, deps.scenes), total: totalScore(game.userId) })
+  const view = (game: Game) => ({ ...publicGame(game, deps.scenes, deps.ambience ?? null), total: totalScore(game.userId) })
   const sceneRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/scenes\/([a-z0-9_-]{1,40})$/
 
   const discover = (game: Game, speaker: string, ids: string[]) => {
@@ -239,6 +242,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       if (game) {
         await ensureGreek(game)
         void deps.scenes?.ensureAll(game.id, game.scenario)
+        void deps.ambience?.ensureMany(game.scenario.characters.map(ambienceOf))
       }
       send(res, 200, { game: game ? view(game) : null })
       return true
@@ -265,7 +269,18 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       abandonActive(db, u.id)
       const game = createGame(db, u.id, level, scenario)
       void deps.scenes?.ensureAll(game.id, scenario)
+      void deps.ambience?.ensureMany(scenario.characters.map(ambienceOf))
       send(res, 201, { game: view(game) })
+      return true
+    }
+
+    const am = /^\/api\/city\/ambience\/([a-z_]{1,20})$/.exec(path)
+    if (method === 'GET' && am) {
+      requireAllowed(user)
+      const mp3 = deps.ambience?.read(am[1])
+      if (!mp3) throw new HttpError(404, 'Звука пока нет')
+      res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': mp3.length, 'Cache-Control': 'private, max-age=604800' })
+      res.end(mp3)
       return true
     }
 

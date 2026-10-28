@@ -1,6 +1,6 @@
 import { lessonsUpTo } from '../data/grammar'
 import { wordPool } from '../data/levels'
-import { CITY_SPEEDS, type SpeakHint } from '../logic/appState'
+import { CITY_AMBIENCE_LEVELS, CITY_SPEEDS, type SpeakHint } from '../logic/appState'
 import { CITY_NAME } from '../logic/city/name'
 import { LEVELS, type Direction, type Level } from '../types/word'
 
@@ -13,6 +13,8 @@ interface Props {
   speakHint: SpeakHint
   citySpeed: number
   onCitySpeed: (v: number) => void
+  cityAmbience: number
+  onCityAmbience: (v: number) => void
   onDirection: (d: Direction) => void
   onAutoSpeak: (v: boolean) => void
   onLevel: (l: Level) => void
@@ -30,6 +32,8 @@ export function SettingsSheet({
   speakHint,
   citySpeed,
   onCitySpeed,
+  cityAmbience,
+  onCityAmbience,
   onDirection,
   onAutoSpeak,
   onLevel,
@@ -106,6 +110,28 @@ export function SettingsSheet({
             {CITY_SPEEDS.map((v) => (
               <button key={v} className={v === citySpeed ? 'level-tick level-tick-active' : 'level-tick'} onClick={() => onCitySpeed(v)}>
                 {v.toFixed(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="sheet-label">
+          {CITY_NAME}: фоновые звуки — {cityAmbience === 0 ? 'выключены' : `${Math.round(cityAmbience * 100)}%`}
+        </div>
+        <div className="level-slider">
+          <input
+            type="range"
+            min={0}
+            max={CITY_AMBIENCE_LEVELS.length - 1}
+            step={1}
+            value={Math.max(0, CITY_AMBIENCE_LEVELS.indexOf(cityAmbience))}
+            onChange={(e) => onCityAmbience(CITY_AMBIENCE_LEVELS[Number(e.target.value)])}
+            aria-label="Громкость фоновых звуков"
+          />
+          <div className="level-ticks">
+            {CITY_AMBIENCE_LEVELS.map((v) => (
+              <button key={v} className={v === cityAmbience ? 'level-tick level-tick-active' : 'level-tick'} onClick={() => onCityAmbience(v)}>
+                {v === 0 ? 'выкл' : Math.round(v * 100)}
               </button>
             ))}
           </div>

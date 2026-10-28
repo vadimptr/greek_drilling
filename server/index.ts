@@ -4,6 +4,7 @@ import { claudeFacts, claudeLevels, claudeScenarios, claudeTranslator } from './
 import { dropModeratedVoices, elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
 import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
+import { AmbienceStore, elevenLabsSounds } from './city/ambience.ts'
 import { openDb } from './db.ts'
 import { dirname, join } from 'node:path'
 
@@ -46,10 +47,11 @@ const images =
       ? elevenLabsImages(env.ELEVENLABS_API_KEY, env.CITY_IMAGE_MODEL || 'gemini-3.1-flash-image')
       : null
 const scenes = new SceneStore(join(dataDir, 'city-scenes'), images)
+const ambience = new AmbienceStore(join(dataDir, 'city-ambience'), env.ELEVENLABS_API_KEY ? elevenLabsSounds(env.ELEVENLABS_API_KEY) : null)
 
 const port = Number(env.PORT ?? 3000)
 const db = openDb(env.DB_PATH ?? 'data/gd.db')
-const server = createServer(createApp(db, secret, { ...city, scenes }))
+const server = createServer(createApp(db, secret, { ...city, scenes, ambience }))
 server.listen(port, () => console.log(`api on :${port}`))
 
 const stop = () => server.close(() => { db.close(); process.exit(0) })

@@ -367,3 +367,25 @@ test('stripTags and moderated voices', async () => {
   assert.deepEqual(await dropModeratedVoices(cfg, fake), ['bad', 'bad'])
   assert.deepEqual(cfg.voices, { 'female-young': ['good'] })
 })
+
+test('ambience: guessed from the place for old scenarios, generated once, served and linked from cards', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { AmbienceStore, ambienceOf } = await import('./ambience.ts')
+  const s = validateScenario(scenario())
+  assert.equal(ambienceOf(s.characters[2]), 'harbour')
+  assert.equal(ambienceOf(s.characters[1]), 'kafeneio')
+  assert.equal(ambienceOf({ ...s.characters[0], ambience: 'bakery' }), 'bakery')
+  const made: string[] = []
+  const ambience = new AmbienceStore(mkdtempSync(`${tmpdir()}/amb-`), { generate: async (p) => { made.push(p); return Buffer.from('mp3') } })
+  const { call, login, close } = await start({ ambience })
+  const me = await login('Vadim')
+  await call('POST', '/api/city/games', {}, me)
+  await new Promise((r) => setTimeout(r, 50))
+  assert.equal(made.length, 3)
+  const game = (await call('GET', '/api/city/games/current', undefined, me)).body.game
+  assert.equal(game.characters.find((c: { id: string }) => c.id === 'yiannis').ambience, '/api/city/ambience/harbour')
+  assert.equal(made.length, 3)
+  assert.equal((await call('GET', '/api/city/ambience/../../etc', undefined, me)).status, 404)
+  await close()
+})

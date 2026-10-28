@@ -22,6 +22,7 @@ export interface Character {
   knows: string
   refers_to: string[]
   greeting_el: string
+  ambience?: string
 }
 
 export interface Fact {
@@ -89,7 +90,7 @@ export const SCENARIO_SCHEMA = {
         additionalProperties: false,
         required: [
           'id', 'name_el', 'name_ru', 'role_ru', 'role_el', 'gender', 'age', 'place_el', 'place_ru',
-          'personality', 'knows', 'refers_to', 'greeting_el',
+          'personality', 'knows', 'refers_to', 'greeting_el', 'ambience',
         ],
         properties: {
           id: { type: 'string' },
@@ -105,6 +106,10 @@ export const SCENARIO_SCHEMA = {
           knows: { type: 'string' },
           refers_to: { type: 'array', items: { type: 'string' } },
           greeting_el: { type: 'string' },
+          ambience: {
+            type: 'string',
+            enum: ['harbour', 'fish_market', 'kafeneio', 'square', 'bakery', 'shop', 'beach', 'hill', 'lane', 'kiosk'],
+          },
         },
       },
     },
@@ -171,6 +176,7 @@ Rules:
 - personality: in English, 1-2 sentences, a distinct manner of speaking.
 - role_ru / role_el: who the character is, in Russian and in Greek ("хозяйка киоска" / "η ιδιοκτήτρια του περιπτέρου"), Greek at level ${level}.
 - place_el / place_ru: where the character is right now, in Greek and in Russian.
+- ambience: the background sound of the character's place: harbour, fish_market, kafeneio, square, bakery, shop, beach (taverna by the sea), hill (church, upper town), lane or kiosk.
 - greeting_el: the first line this character says when the tourist approaches, natural Greek at level ${level}, 1 short sentence.
 
 Facts (the player collects them for points while talking):

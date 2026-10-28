@@ -6,6 +6,7 @@ import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
 import { Translated } from '../components/city/Translated'
 import { Progress } from '../components/city/Progress'
+import { useAmbience } from '../logic/city/useAmbience'
 import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
@@ -17,6 +18,7 @@ interface Props {
   signedIn: boolean
   level: Level
   speed: number
+  ambienceVolume: number
   storyMs: number
   onSignIn: () => void
   onTotal: (total: number) => void
@@ -45,7 +47,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -362,6 +364,9 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
   const shownId = phase === 'painting' ? paintingId : (character?.id ?? (active ? game?.startId : null))
   const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
   const sceneState = phase === 'generating' || phase === 'walking' || scene ? null : game?.characters.find((c) => c.id === shownId)?.sceneState
+  const soundOn = phase === 'painting' || phase === 'connecting' || phase === 'talking' || (phase === 'idle' && !!character) || phase === 'won'
+  const ambienceUrl = allowed && soundOn ? (game?.characters.find((c) => c.id === shownId)?.ambience ?? null) : null
+  useAmbience(ambienceUrl, ambienceVolume, speaking)
   const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'idle')
 
   return (

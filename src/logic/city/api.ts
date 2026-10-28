@@ -10,6 +10,7 @@ export interface CharacterCard {
   placeRu: string
   scene?: string | null
   sceneState?: SceneState
+  ambience?: string | null
 }
 
 export type SceneState =
