@@ -52,7 +52,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
     allowedUsers: ['Vadim'],
     dailyTalks: 10,
     scenarios: { generate: async () => validateScenario(scenario()) },
-    facts: { match: async (_speaker, _lines, facts) => facts.filter((f) => f.id === 'f5').map((f) => f.id) },
+    facts: { match: async (_speaker, _lines, facts) => ({ facts: facts.filter((f) => f.id === 'f5').map((f) => f.id), people: [] }) },
     scenes: null,
     translator: { toRussian: async (text) => { translated.push(text); return `ru:${text}` }, toGreek: async (text) => `el:${text}` },
     voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
@@ -238,8 +238,8 @@ test('people appear in the notebook only when introduced; moods persist and shap
   ] }, me)).body.game
   assert.deepEqual(said.notebook.map((p: { id: string }) => p.id), ['eleni'])
   assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas' }, me)).status, 409)
-  const stranger = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'yiannis' }, me)).body.game
-  assert.deepEqual(stranger.notebook.map((p: { id: string }) => p.id), ['eleni'])
+  const self = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'eleni' }, me)).body.game
+  assert.deepEqual(self.notebook.map((p: { id: string }) => p.id), ['eleni'])
   const heard = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)).body.game
   assert.deepEqual(heard.notebook.map((p: { id: string }) => p.id), ['eleni', 'kostas'])
 
@@ -567,4 +567,24 @@ test('pool sizes per level', async () => {
   const scenarios = { generate: async () => validateScenario(scenario()) }
   await createPool(db, { scenarios, scenes: null, size: { A1: 4, A2: 2, B1: 1 } }).refill()
   assert.deepEqual(['A1', 'A2', 'B1'].map((l) => poolCount(db, l as never)), [4, 2, 1])
+})
+
+test('people the resident told about are found in the transcript even without the introduce tool', async () => {
+  let offered: string[] = []
+  const { call, login, close } = await start({
+    facts: { match: async (_s, _l, _f, people) => { offered = people.map((p) => p.id); return { facts: [], people: ['yiannis'] } } },
+  })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', {}, me)).body.game
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  const after = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
+    { role: 'user', text: 'Πού είναι ο ψαράς;' },
+    { role: 'agent', text: 'Ο Γιάννης είναι στο λιμάνι.' },
+  ] }, me)).body.game
+  assert.deepEqual(offered.sort(), ['kostas', 'yiannis'])
+  assert.deepEqual(after.notebook.map((p: { id: string }) => p.id), ['eleni', 'yiannis'])
+  const { buildPersona } = await import('./scenario.ts')
+  const p = buildPersona(validateScenario(scenario()), 'eleni', 'A1', { met: [], cameFrom: null, mood: 'friendly', previous: [] })
+  assert.match(p.systemPrompt, /Other people in town[\s\S]*id "yiannis"/)
+  await close()
 })

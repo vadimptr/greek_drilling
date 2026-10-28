@@ -105,16 +105,17 @@ Is it logical and consistent? ok=true if there are no real problems. Otherwise o
 const MATCH_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['fact_ids'],
-  properties: { fact_ids: { type: 'array', items: { type: 'string' } } },
+  required: ['fact_ids', 'people_ids'],
+  properties: { fact_ids: { type: 'array', items: { type: 'string' } }, people_ids: { type: 'array', items: { type: 'string' } } },
 } as const
 
 export function claudeFacts(apiKey: string): FactMatcher {
   const client = new Anthropic({ apiKey, timeout: 60_000 })
   return {
-    async match(speaker, lines, facts) {
+    async match(speaker, lines, facts, people) {
       const transcript = lines.map((l) => `${l.role === 'agent' ? speaker : 'Tourist'}: ${l.text}`).join('\n')
-      const list = facts.map((f) => `- ${f.id}: ${f.text}`).join('\n')
+      const list = facts.length ? facts.map((f) => `- ${f.id}: ${f.text}`).join('\n') : '- none'
+      const others = people.length ? people.map((p) => `- ${p.id}: ${p.name}`).join('\n') : '- none'
       const response = await ask(client, HELPER_MODEL, {
         max_tokens: 4000,
         output_config: { effort: 'low', format: { type: 'json_schema', schema: MATCH_SCHEMA } },
@@ -128,15 +129,21 @@ ${transcript}
 Facts:
 ${list}
 
-Which of these facts did ${speaker} actually communicate to the tourist in this conversation (said it, or clearly confirmed the tourist's guess)? A fact counts only if its key content was really said. Return their ids; return an empty list if none.`,
+People of the town:
+${others}
+
+1. fact_ids: which of these facts did ${speaker} actually communicate to the tourist (said it, or clearly confirmed the tourist's guess)? A fact counts only if its key content was really said.
+2. people_ids: which of these people did ${speaker} actually tell the tourist about — who the person is or where to find them? A bare mention of a name (in a greeting, a joke, regards) does not count.
+Return ids; empty lists if none.`,
           },
         ],
       })
       if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to match facts')
       const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
-      const parsed = JSON.parse(text) as { fact_ids?: unknown }
-      const known = new Set(facts.map((f) => f.id))
-      return Array.isArray(parsed.fact_ids) ? parsed.fact_ids.filter((id): id is string => typeof id === 'string' && known.has(id)) : []
+      const parsed = JSON.parse(text) as { fact_ids?: unknown; people_ids?: unknown }
+      const pick = (raw: unknown, allowed: Set<string>) =>
+        Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string' && allowed.has(id)) : []
+      return { facts: pick(parsed.fact_ids, new Set(facts.map((f) => f.id))), people: pick(parsed.people_ids, new Set(people.map((p) => p.id))) }
     },
   }
 }

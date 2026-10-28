@@ -292,6 +292,9 @@ export function buildPersona(s: Scenario, characterId: string, level: Level, mee
     const o = byId(id)
     return `- id "${o.id}": ${o.name_el} (${o.role_ru}), now at ${o.place_el}`
   })
+  const townsfolk = s.characters
+    .filter((o) => o.id !== c.id && !c.refers_to.includes(o.id))
+    .map((o) => `- id "${o.id}": ${o.name_el} (${o.role_ru}), now at ${o.place_el}`)
   const metNames = met.filter((id) => id !== c.id).map((id) => byId(id).name_el)
   const tellable = tellableBy(s, c.id).map(
     (f) => `- ${f.id} (${f.about === c.id ? 'about you' : `about ${byId(f.about).name_el}`}): ${f.text_en}`,
@@ -355,7 +358,9 @@ Right after you have told the tourist one of them (or confirmed it when they gue
 
 People you know who matter for the tourist (tell about them only when the tourist asks or when it really helps their task):
 ${contacts.length ? contacts.join('\n') : '- nobody in particular'}
-Right after you told the tourist who one of these people is or where to find them, call the tool introduce with that person's id, silently. Don't mention people the tourist didn't ask about just to name them.
+Other people in town you know by sight (in a small town everybody knows everybody):
+${townsfolk.length ? townsfolk.join('\n') : '- nobody else'}
+Every time you tell the tourist who any of these people is or where to find them, call the tool introduce with that person's id right away, silently — it is important. Don't mention people the tourist didn't ask about just to name them.
 
 ${solverPart}
 

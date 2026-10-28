@@ -394,11 +394,21 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
       addLines(db, game, characterId, lines)
       const open = tellableBy(game.scenario, characterId).filter((f) => !game.found.includes(f.id))
       const agentLines = lines.filter((l) => l.role === 'agent').map((l) => l.text)
+      const inBook = new Set(notebookIds(game))
+      const strangers = game.scenario.characters.filter((c) => c.id !== characterId && !inBook.has(c.id))
       const matching =
-        deps.facts && open.length && agentLines.length
+        deps.facts && (open.length || strangers.length) && agentLines.length
           ? deps.facts
-              .match(character.name_el, lines, open.map((f) => ({ id: f.id, text: f.text_en })))
-              .then((ids) => discover(game, characterId, ids))
+              .match(
+                character.name_el,
+                lines,
+                open.map((f) => ({ id: f.id, text: f.text_en })),
+                strangers.map((c) => ({ id: c.id, name: `${c.name_el} (${c.role_ru})` })),
+              )
+              .then((found) => {
+                discover(game, characterId, found.facts)
+                addHeard(db, game, found.people)
+              })
               .catch((e) => console.error(e))
           : Promise.resolve()
       const checking: Promise<LevelCheck | null> =
@@ -427,7 +437,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
     if (m[2] === 'introduce') {
       if (!game.met.includes(characterId)) throw new HttpError(409, 'С этим жителем ты ещё не говорил')
       const target = typeof body.target === 'string' ? body.target : ''
-      if (character.refers_to.includes(target)) addHeard(db, game, [target])
+      if (target !== characterId && game.scenario.characters.some((c) => c.id === target)) addHeard(db, game, [target])
       send(res, 200, { game: view(game) })
       return true
     }

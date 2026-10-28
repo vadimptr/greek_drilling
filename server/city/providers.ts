@@ -5,7 +5,12 @@ export interface ScenarioGenerator {
 }
 
 export interface FactMatcher {
-  match(speaker: string, lines: { role: string; text: string }[], facts: { id: string; text: string }[]): Promise<string[]>
+  match(
+    speaker: string,
+    lines: { role: string; text: string }[],
+    facts: { id: string; text: string }[],
+    people: { id: string; name: string }[],
+  ): Promise<{ facts: string[]; people: string[] }>
 }
 
 export interface LevelIssue {
