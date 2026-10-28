@@ -673,6 +673,7 @@
 
 .city-dock { display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: 8px; }
 .city-dock .speak-status { min-height: 22px; }
+.city-notice { font-size: 13px; color: var(--muted); }
 .city-level { font-size: 13px; color: var(--ok); padding: 4px 10px; border-radius: 99px; background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .city-level-warn { color: #b45309; background: color-mix(in srgb, #f59e0b 14%, transparent); }
 .tip-pop { white-space: pre-line; }

@@ -32,12 +32,22 @@ export class Timing {
   }
 }
 
-export type SceneState = { state: 'ready' } | { state: 'queued' } | { state: 'drawing'; elapsedMs: number; expectedMs: number } | { state: 'none' }
+export type SceneState =
+  | { state: 'ready' }
+  | { state: 'queued' }
+  | { state: 'drawing'; elapsedMs: number; expectedMs: number }
+  | { state: 'failed' }
+  | { state: 'none' }
+
+const RETRY_AFTER_MS = 10 * 60_000
+const PAUSE_MS = 15 * 60_000
+const BLOCKING = /\b(401|402|403|429)\b|paid_plan_required|quota|billing|insufficient|credit|limit|verif/i
 
 export class SceneStore {
   private pending = new Map<string, Promise<void>>()
   private started = new Map<string, number>()
   private queued = new Set<string>()
+  private failed = new Map<string, number>()
   readonly timing = new Timing(35_000)
   private pausedUntil = 0
   private dir: string
@@ -71,7 +81,13 @@ export class SceneStore {
     const at = this.started.get(key)
     if (at !== undefined) return { state: 'drawing', elapsedMs: Date.now() - at, expectedMs: this.timing.ms }
     if (this.queued.has(key)) return { state: 'queued' }
+    if (!this.enabled || this.recentlyFailed(key)) return { state: 'failed' }
     return { state: 'none' }
+  }
+
+  private recentlyFailed(key: string): boolean {
+    const at = this.failed.get(key)
+    return at !== undefined && Date.now() - at < RETRY_AFTER_MS
   }
 
   ensureAll(gameId: string, s: Scenario): Promise<void> {
@@ -82,8 +98,11 @@ export class SceneStore {
   }
 
   ensure(gameId: string, c: Character): Promise<void> {
-    if (!this.enabled || this.has(gameId, c.id)) return Promise.resolve()
     const key = `${gameId}/${c.id}`
+    if (!this.enabled || this.has(gameId, c.id) || this.recentlyFailed(key)) {
+      this.queued.delete(key)
+      return Promise.resolve()
+    }
     const running = this.pending.get(key)
     if (running) return running
     this.queued.delete(key)
@@ -93,11 +112,16 @@ export class SceneStore {
       .generate(scenePrompt(c))
       .then((png) => {
         this.timing.record(Date.now() - startedAt)
+        this.failed.delete(key)
         mkdirSync(join(this.dir, gameId), { recursive: true })
         writeFileSync(this.path(gameId, c.id), png)
       })
       .catch((e) => {
-        if (e instanceof ProviderError && /\b(402|429)\b|paid_plan_required|quota/i.test(e.message)) this.pausedUntil = Date.now() + 15 * 60_000
+        this.failed.set(key, Date.now())
+        if (e instanceof ProviderError && BLOCKING.test(e.message)) {
+          this.pausedUntil = Date.now() + PAUSE_MS
+          this.queued.clear()
+        }
         console.error(`scene ${key}:`, e instanceof Error ? e.message : e)
       })
       .finally(() => {

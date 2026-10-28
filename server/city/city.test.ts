@@ -390,3 +390,22 @@ test('ambience: guessed from the place for old scenarios, generated once, served
   assert.equal((await call('GET', '/api/city/ambience/../../etc', undefined, me)).status, 404)
   await close()
 })
+
+test('scene failures are reported and pause generation on billing errors', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { SceneStore } = await import('./images.ts')
+  const { ProviderError } = await import('./providers.ts')
+  const s = validateScenario(scenario())
+  let calls = 0
+  const flaky = new SceneStore(mkdtempSync(`${tmpdir()}/sc-`), { id: 'x', generate: async () => { calls++; throw new Error('boom') } })
+  await flaky.ensure('g', s.characters[0])
+  assert.deepEqual(flaky.status('g', 'eleni'), { state: 'failed' })
+  await flaky.ensure('g', s.characters[0])
+  assert.equal(calls, 1)
+  assert.equal(flaky.enabled, true)
+  const broke = new SceneStore(mkdtempSync(`${tmpdir()}/sc-`), { id: 'x', generate: async () => { throw new ProviderError('openai image: HTTP 400 Billing hard limit has been reached') } })
+  await broke.ensure('g', s.characters[0])
+  assert.equal(broke.enabled, false)
+  assert.deepEqual(broke.status('g', 'kostas'), { state: 'failed' })
+})

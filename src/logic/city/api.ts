@@ -17,6 +17,7 @@ export type SceneState =
   | { state: 'ready' }
   | { state: 'queued' }
   | { state: 'drawing'; elapsedMs: number; expectedMs: number }
+  | { state: 'failed' }
   | { state: 'none' }
 
 export interface NoteFact {

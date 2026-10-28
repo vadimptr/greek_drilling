@@ -246,9 +246,10 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
       if (g.scenesEnabled && !g.characters.find((c) => c.id === characterId)?.scene) {
         setPhase('painting')
         setPaintingId(characterId)
-        await waitScene(g, characterId, seq)
+        const drawn = await waitScene(g, characterId, seq)
         setPaintingId(null)
         if (seq !== callSeq.current) return
+        if (!drawn) setNotice('Картинку нарисовать не получилось — играем без неё')
       }
       setPhase('connecting')
       const t = await talk(g.id, characterId, from, speedRef.current)
@@ -273,21 +274,26 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
     }
   }
 
-  const waitScene = async (g: CityGame, characterId: string, seq: number) => {
+  const waitScene = async (g: CityGame, characterId: string, seq: number): Promise<boolean> => {
     const until = Date.now() + SCENE_WAIT_MS
     let fresh = await requestScene(g.id, characterId).catch(() => null)
-    let missing = 0
+    let idle = 0
     while (Date.now() < until && seq === callSeq.current) {
-      if (fresh && fresh.id === g.id) {
+      if (!fresh) return false
+      if (fresh.id === g.id) {
         applyIfCurrent(fresh)
         const c = fresh.characters.find((x) => x.id === characterId)
-        if (!fresh.scenesEnabled || c?.scene) return
-        missing = c?.sceneState?.state === 'none' ? missing + 1 : 0
-        if (missing >= 3) return
+        const st = c?.sceneState
+        if (c?.scene) return true
+        if (!fresh.scenesEnabled || st?.state === 'failed') return false
+        if (st?.state === 'drawing' && st.elapsedMs > Math.max(60_000, st.expectedMs * 2.5)) return false
+        idle = st?.state === 'none' ? idle + 1 : 0
+        if (idle >= 3) return false
       }
       await sleep(SCENE_POLL_MS)
       fresh = await currentGame().catch(() => null)
     }
+    return false
   }
 
   const startNew = async () => {
@@ -448,9 +454,9 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
         </div>
 
         <div className="city-dock">
+          {!error && notice && <div className="city-notice">{notice}</div>}
           <div className="speak-status" aria-live="polite">
             {error && <span className="speak-bad">{error}</span>}
-            {!error && notice && phase === 'idle' && <span className="speak-bad">{notice}</span>}
             {!error && phase === 'connecting' && 'Подхожу…'}
             {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
             {!error && done && 'Задание выполнено — начни новое кнопкой или микрофоном'}
