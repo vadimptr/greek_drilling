@@ -28,7 +28,8 @@ interface Props {
 
 const SUBS_KEY = 'greek_drilling.city.subs'
 const LEAVE_AFTER_SPEECH_MS = 900
-const LEAVE_IF_SILENT_MS = 2500
+const LEAVE_AFTER_GOODBYE_MS = 300
+const FACT_SPEECH_WINDOW_MS = 8000
 const WALK_MS = 1200
 const FRESH_MS = 4000
 const SCENE_POLL_MS = 2000
@@ -95,6 +96,8 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
   const endingRef = useRef(false)
   const leavingRef = useRef(false)
   const lastSpokeRef = useRef<string | null>(null)
+  const lastAgentLineRef = useRef(0)
+  const pendingFactsRef = useRef<{ id: string; at: number }[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const wonRef = useRef(false)
   const timerRef = useRef<number | undefined>(undefined)
@@ -216,6 +219,14 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     onLine: (role, text) => {
       if (seq !== callSeq.current || !text.trim()) return
       linesRef.current = [...linesRef.current, { role, text }]
+      if (role === 'agent') {
+        lastAgentLineRef.current = Date.now()
+        const g = gameRef.current
+        const current = currentRef.current
+        const fresh = pendingFactsRef.current.filter((f) => Date.now() - f.at < FACT_SPEECH_WINDOW_MS).map((f) => f.id)
+        pendingFactsRef.current = []
+        if (g && current && fresh.length) void revealFacts(g.id, current, fresh).then(applyIfCurrent).catch(() => undefined)
+      }
       if (subsRef.current) void translateCached(text).catch(() => undefined)
       setLines(linesRef.current)
     },
@@ -225,7 +236,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       setSpeaking(mode === 'speaking')
       if (!pendingRef.current && !walkAwayRef.current && !endingRef.current) return
       if (mode === 'speaking') window.clearTimeout(timerRef.current)
-      else scheduleLeave(LEAVE_AFTER_SPEECH_MS)
+      else scheduleLeave(pendingRef.current ? LEAVE_AFTER_SPEECH_MS : LEAVE_AFTER_GOODBYE_MS)
     },
     onTool: (name, params) => {
       const g = gameRef.current
@@ -238,7 +249,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       }
       if (name === 'end_talk' || name === 'go_to') {
         endingRef.current = true
-        scheduleLeave(modeRef.current === 'listening' ? LEAVE_IF_SILENT_MS : 15_000)
+        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_GOODBYE_MS : 15_000)
         return 'ok'
       }
       if (name === 'set_mood') {
@@ -250,12 +261,17 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       if (name === 'walk_away') {
         walkAwayRef.current = true
         pendingRef.current = null
-        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_SPEECH_MS : 15_000)
+        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_GOODBYE_MS : 15_000)
         return 'ok'
       }
       if (name === 'reveal_fact') {
         const factId = String(params.fact_id ?? '')
-        if (factId) void revealFacts(g.id, current, [factId]).then(applyIfCurrent).catch(() => undefined)
+        if (!factId) return 'ok'
+        if (Date.now() - lastAgentLineRef.current < FACT_SPEECH_WINDOW_MS) {
+          void revealFacts(g.id, current, [factId]).then(applyIfCurrent).catch(() => undefined)
+        } else {
+          pendingFactsRef.current.push({ id: factId, at: Date.now() })
+        }
         return 'ok'
       }
       completeGame(g.id, current)
@@ -295,6 +311,8 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       setCharacter(t.character)
       linesRef.current = []
       setLines([])
+      lastAgentLineRef.current = 0
+      pendingFactsRef.current = []
       modeRef.current = 'listening'
       const call = await startVoice(t.session, handlers(seq))
       if (seq !== callSeq.current) {
