@@ -17,15 +17,15 @@ export function Progress({ label, startedAt, expectedMs }: Props) {
   const pct = ratio < 1 ? Math.round(ratio * 95) : Math.min(99, Math.round(95 + (1 - 1 / (ratio * 2)) * 4))
   const left = Math.ceil((expectedMs - elapsed) / 1000)
   return (
-    <div className="progress-card" role="status">
-      <div className="progress-label">
+    <div className="pc" role="status">
+      <div className="pc-label">
         <span>{label}</span>
-        <span className="progress-pct">{pct}%</span>
+        <span className="pc-pct">{pct}%</span>
       </div>
-      <div className="progress-track">
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
+      <div className="pc-track">
+        <div className="pc-fill" style={{ width: `${pct}%` }} />
       </div>
-      <div className="progress-eta">{left > 0 ? `осталось ≈ ${left} с` : 'почти готово…'}</div>
+      <div className="pc-eta">{left > 0 ? `осталось ≈ ${left} с` : 'почти готово…'}</div>
     </div>
   )
 }
