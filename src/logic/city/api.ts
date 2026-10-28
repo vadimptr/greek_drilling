@@ -94,7 +94,11 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   }
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new CityError(res.status, typeof data.error === 'string' ? data.error : 'Ошибка сервера')
+  if (!res.ok) {
+    if (typeof data.error === 'string') throw new CityError(res.status, data.error)
+    if (res.status >= 502 && res.status <= 504) throw new CityError(res.status, 'Сервер обновляется, попробуй ещё раз через минуту')
+    throw new CityError(res.status, 'Ошибка сервера')
+  }
   return data as T
 }
 
