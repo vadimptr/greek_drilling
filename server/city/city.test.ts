@@ -556,3 +556,15 @@ async function startWithDb(overrides: Partial<CityDeps>) {
   const login = async (name: string) => (await call('POST', '/api/enter', { name, create: true })).cookie
   return { call, login, db, close: () => new Promise((r) => server.close(r)) }
 }
+
+test('pool sizes per level', async () => {
+  const { parsePoolSizes, createPool, poolCount } = await import('./pool.ts')
+  assert.deepEqual(parsePoolSizes('A1:10, A2:5,B1:3,C2:9,bad', 1), { A1: 10, A2: 5, B1: 3 })
+  assert.deepEqual(parsePoolSizes(undefined, 2), { A1: 2, A2: 2, B1: 2 })
+  const db = openDb(':memory:')
+  const { migrateCity } = await import('./store.ts')
+  migrateCity(db)
+  const scenarios = { generate: async () => validateScenario(scenario()) }
+  await createPool(db, { scenarios, scenes: null, size: { A1: 4, A2: 2, B1: 1 } }).refill()
+  assert.deepEqual(['A1', 'A2', 'B1'].map((l) => poolCount(db, l as never)), [4, 2, 1])
+})

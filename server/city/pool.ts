@@ -15,7 +15,16 @@ export interface PoolDeps {
   scenarios: ScenarioGenerator | null
   scenes: SceneStore | null
   ambience?: AmbienceStore | null
-  size: number
+  size: number | Partial<Record<Level, number>>
+}
+
+export function parsePoolSizes(raw: string | undefined, fallback: number): Record<Level, number> {
+  const sizes: Record<Level, number> = { A1: fallback, A2: fallback, B1: fallback }
+  for (const pair of (raw ?? '').split(',')) {
+    const [level, n] = pair.split(':').map((x) => x.trim())
+    if (LEVELS.includes(level as Level) && /^\d+$/.test(n ?? '')) sizes[level as Level] = Number(n)
+  }
+  return sizes
 }
 
 const now = () => new Date().toISOString()
@@ -56,7 +65,9 @@ export function createPool(db: DatabaseSync, deps: PoolDeps) {
   }
 
   const refill = async (at = new Date()) => {
-    if (!deps.scenarios || deps.size <= 0) return
+    const sizeOf = (level: Level) => (typeof deps.size === 'number' ? deps.size : (deps.size[level] ?? 0))
+    const most = Math.max(...LEVELS.map(sizeOf))
+    if (!deps.scenarios || most <= 0) return
     if (running) {
       again = true
       return
@@ -64,9 +75,9 @@ export function createPool(db: DatabaseSync, deps: PoolDeps) {
     running = true
     try {
       db.prepare('DELETE FROM city_pool WHERE created_at < ?').run(new Date(at.getTime() - MAX_AGE_MS).toISOString())
-      for (let round = 0; round < deps.size; round++) {
+      for (let round = 0; round < most; round++) {
         for (const level of LEVELS) {
-          if (poolCount(db, level) >= deps.size) continue
+          if (poolCount(db, level) >= sizeOf(level)) continue
           try {
             await fillOne(level)
           } catch (e) {

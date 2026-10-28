@@ -19,7 +19,7 @@ export interface CityDeps {
   allowedUsers: string[]
   dailyTalks: number
   dailyStories?: number
-  poolSize?: number
+  poolSize?: number | Partial<Record<Level, number>>
   poolIntervalMs?: number
   scenarios: ScenarioGenerator | null
   facts: FactMatcher | null

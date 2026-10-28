@@ -3,6 +3,7 @@ import { createApp } from './app.ts'
 import { claudeFacts, claudeLevels, claudeScenarios, claudeTranslator } from './city/claude.ts'
 import { dropModeratedVoices, elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
+import { parsePoolSizes } from './city/pool.ts'
 import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
 import { AmbienceStore, elevenLabsSounds } from './city/ambience.ts'
 import { openDb } from './db.ts'
@@ -31,7 +32,7 @@ const city = {
   allowedUsers: parseAllowed(env.CITY_ALLOWED_USERS),
   dailyTalks: Number(env.CITY_DAILY_TALKS ?? 40),
   dailyStories: Number(env.CITY_DAILY_STORIES ?? 15),
-  poolSize: Number(env.CITY_POOL_SIZE ?? 3),
+  poolSize: parsePoolSizes(env.CITY_POOL_SIZES, Number(env.CITY_POOL_SIZE ?? 3)),
   poolIntervalMs: 5 * 60_000,
   scenarios: env.ANTHROPIC_API_KEY ? claudeScenarios(env.ANTHROPIC_API_KEY) : null,
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,
