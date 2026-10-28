@@ -971,7 +971,7 @@
 
 @media (min-width: 960px) {
   .app {
-    max-width: 1280px;
+    max-width: none;
     grid-template-columns: 220px minmax(0, 1fr);
     grid-template-rows: auto 1fr;
     grid-template-areas: 'header screen' 'nav screen';
@@ -1002,7 +1002,6 @@
 
   .screen > *, .hub-body > *, .aorist > * { width: 100%; max-width: 760px; margin-inline: auto; }
   .screen > .grammar-hub { max-width: 1040px; }
-  .app-wide { max-width: none; }
   .screen > .city-layout { max-width: none; flex: 1; min-height: 0; flex-direction: row; align-items: stretch; }
   .city-layout > .city { min-width: 0; flex: 1; height: auto; min-height: 0; }
   .city-layout > .notebook { width: 360px; flex-shrink: 0; overflow-y: auto; margin-bottom: 0; align-self: stretch; }

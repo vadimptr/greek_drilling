@@ -168,7 +168,7 @@ export default function App() {
   }
 
   return (
-    <div className={app.tab === 'city' ? 'app app-wide' : 'app'}>
+    <div className="app">
       <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)}
         user={account.user}
         onAccount={() => setAccountOpen(true)}
