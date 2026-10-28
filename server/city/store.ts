@@ -156,6 +156,10 @@ export function allGames(db: DatabaseSync, userId: number): Game[] {
   return (db.prepare('SELECT * FROM city_games WHERE user_id = ?').all(userId) as unknown as GameRow[]).map(toGame)
 }
 
+export function saveScenario(db: DatabaseSync, game: Game): void {
+  db.prepare('UPDATE city_games SET scenario = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.scenario), now(), game.id)
+}
+
 export function addHeard(db: DatabaseSync, game: Game, ids: string[]): void {
   const added = ids.filter((id) => !game.heard.includes(id))
   if (!added.length) return

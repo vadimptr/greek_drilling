@@ -7,7 +7,7 @@ import { imageType, type SceneStore } from './images.ts'
 import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
-  abandonActive, addFound, addHeard, addLines, allGames, linesFor, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  abandonActive, addFound, addHeard, addLines, allGames, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
 } from './store.ts'
 
@@ -137,6 +137,22 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     return ru
   }
 
+  const greekFilled = new Set<string>()
+  const ensureGreek = async (game: Game) => {
+    const s = game.scenario
+    const t = deps.translator
+    if (!t || greekFilled.has(game.id) || (s.goal_el && s.characters.every((c) => c.role_el))) return
+    greekFilled.add(game.id)
+    try {
+      if (!s.goal_el) s.goal_el = await t.toGreek(s.goal_ru)
+      for (const c of s.characters) if (!c.role_el) c.role_el = await t.toGreek(c.role_ru)
+      saveScenario(db, game)
+    } catch (e) {
+      greekFilled.delete(game.id)
+      console.error(e)
+    }
+  }
+
   const totalScore = (userId: number) => allGames(db, userId).reduce((sum, g) => sum + score(g), 0)
   const view = (game: Game) => ({ ...publicGame(game, deps.scenes), total: totalScore(game.userId) })
   const sceneRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/scenes\/([a-z0-9_-]{1,40})$/
@@ -160,6 +176,10 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     if (method === 'GET' && path === '/api/city/games/current') {
       const u = requireAllowed(user)
       const game = currentGame(db, u.id)
+      if (game) {
+        await ensureGreek(game)
+        void deps.scenes?.ensureAll(game.id, game.scenario)
+      }
       send(res, 200, { game: game ? view(game) : null })
       return true
     }

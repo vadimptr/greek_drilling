@@ -10,6 +10,7 @@ export interface FactMatcher {
 
 export interface Translator {
   toRussian(greek: string): Promise<string>
+  toGreek(russian: string): Promise<string>
 }
 
 export interface VoiceSession {

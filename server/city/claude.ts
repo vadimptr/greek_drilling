@@ -83,19 +83,29 @@ Which of these facts did ${speaker} actually communicate to the tourist in this 
 
 export function claudeTranslator(apiKey: string): Translator {
   const client = new Anthropic({ apiKey, timeout: 30_000 })
+  const run = async (system: string, text: string) => {
+    const response = await client.beta.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'low' },
+      system,
+      messages: [{ role: 'user', content: text }],
+    })
+    if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to translate')
+    return response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim()
+  }
   return {
-    async toRussian(greek) {
-      const response = await client.beta.messages.create({
-        model: MODEL,
-        max_tokens: 2000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        output_config: { effort: 'low' },
-        system: 'Translate the Greek phrase from a spoken conversation into natural Russian. The phrase may have small speech recognition errors or mixed languages. Reply with the translation only, no quotes or comments.',
-        messages: [{ role: 'user', content: greek }],
-      })
-      if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to translate')
-      return response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim()
-    },
+    toRussian: (greek) =>
+      run(
+        'Translate the Greek phrase from a spoken conversation into natural Russian. The phrase may have small speech recognition errors or mixed languages. Reply with the translation only, no quotes or comments.',
+        greek,
+      ),
+    toGreek: (russian) =>
+      run(
+        'Translate the Russian text into simple, natural modern Greek for a learner (A2 level). Keep names as they are in Greek. Reply with the translation only, no quotes or comments.',
+        russian,
+      ),
   }
 }

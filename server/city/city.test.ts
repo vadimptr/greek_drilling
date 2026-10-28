@@ -53,7 +53,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
     scenarios: { generate: async () => validateScenario(scenario()) },
     facts: { match: async (_speaker, _lines, facts) => facts.filter((f) => f.id === 'f5').map((f) => f.id) },
     scenes: null,
-    translator: { toRussian: async (text) => { translated.push(text); return `ru:${text}` } },
+    translator: { toRussian: async (text) => { translated.push(text); return `ru:${text}` }, toGreek: async (text) => `el:${text}` },
     voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
     ...overrides,
   }
@@ -304,4 +304,16 @@ test('openai image provider asks for a landscape image and decodes b64', async (
   }) as typeof fetch)
   assert.equal((await p.generate('boat')).toString(), 'img')
   assert.match(sent, /"size":"1536x1024"/)
+})
+
+test('old games without Greek goal get it filled in once on load', async () => {
+  const old = scenario()
+  const { call, login, close } = await start({ scenarios: { generate: async () => validateScenario(old) } })
+  const me = await login('Vadim')
+  await call('POST', '/api/city/games', {}, me)
+  const game = (await call('GET', '/api/city/games/current', undefined, me)).body.game
+  assert.equal(game.goal, 'el:Узнай у рыбака, что он поймал')
+  assert.equal(game.goalRu, 'Узнай у рыбака, что он поймал')
+  assert.equal(game.characters[0].role, 'el:племянница рыбака')
+  await close()
 })

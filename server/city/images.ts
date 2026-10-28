@@ -8,14 +8,14 @@ export interface ImageGenerator {
   generate(prompt: string): Promise<Buffer>
 }
 
-const STYLE = `Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition, no text, no letters, no captions.
+const STYLE = `Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition. Absolutely no text, letters, signs, boat names or captions anywhere in the image.
 Setting: a small fictional fishing town on the Aegean coast of Greece — whitewashed houses with blue doors and shutters, bougainvillea, stone lanes, fishing boats (kaikia), the sea always nearby.`
 
 const AGE: Record<Character['age'], string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
 export function scenePrompt(c: Character): string {
   return `${STYLE}
-Scene: seen through the eyes of a tourist walking up to ${c.name_el}, a ${AGE[c.age]} Greek ${c.gender === 'male' ? 'man' : 'woman'} — ${c.role_ru} — at ${c.place_el} (${c.place_ru}).
+Scene, first-person view (the viewer is not visible): ${c.name_el}, a ${AGE[c.age]} Greek ${c.gender === 'male' ? 'man' : 'woman'} — ${c.role_ru} — at ${c.place_el} (${c.place_ru}).
 ${c.personality} The person is in the middle of the frame, looking towards the viewer in a friendly way, the place around them is clearly visible.`
 }
 
@@ -137,7 +137,7 @@ export function openAiImages(apiKey: string, model: string, fetchImpl: typeof fe
       const res = await fetchImpl('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, size: '1536x1024', quality: 'medium', n: 1 }),
+        body: JSON.stringify({ model, prompt, size: '1536x1024', quality: 'medium', output_format: 'webp', output_compression: 82, n: 1 }),
         signal: AbortSignal.timeout(180_000),
       })
       if (!res.ok) throw new ProviderError(`openai image: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 300)}`)
