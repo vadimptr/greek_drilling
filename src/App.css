@@ -709,3 +709,51 @@
 .verb-examples { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .verb-examples li { display: flex; flex-direction: column; gap: 2px; }
 .verb-example-el { font-size: 15px; }
+
+@media (min-width: 960px) {
+  .app {
+    max-width: 1280px;
+    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas: 'nav header' 'nav screen';
+    column-gap: 32px;
+    row-gap: 8px;
+    padding: 20px 24px 0;
+  }
+  .header { grid-area: header; padding: 0; }
+  .screen { grid-area: screen; padding: 8px 4px 24px; }
+  .tabbar {
+    grid-area: nav;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    background: transparent;
+    padding: 4px 16px 0 0;
+  }
+  .tab { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 12px 14px; font-size: 15px; }
+  .tab:hover:not(.tab-active) { background: color-mix(in srgb, var(--text) 5%, transparent); }
+
+  .screen > *, .hub-body > *, .aorist > * { width: 100%; max-width: 760px; margin-inline: auto; }
+  .screen > .grammar-hub { max-width: 1040px; }
+  .grammar-hub > .sub-picker { align-self: flex-start; }
+  .hub-body > .aorist, .aorist > .aorist-verbs, .hub-body > .lesson-list { max-width: none; }
+  .aorist > .aorist-groups { justify-content: center; }
+
+  .lesson-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+  .lesson-list > .resume-card, .lesson-list > .lesson-level { grid-column: 1 / -1; }
+  .lesson-card:hover, .verb-row-head:hover { border-color: var(--accent); }
+
+  section.aorist-verbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  section.aorist-verbs > h2 { grid-column: 1 / -1; }
+
+  .options { grid-template-columns: 1fr 1fr; }
+  .options-6 { grid-template-columns: repeat(3, 1fr); }
+  .option:hover:not(:disabled) { border-color: var(--accent); }
+  .prompt-word { font-size: 56px; }
+  .nouns-form { font-size: 48px; }
+
+  .sheet-backdrop { align-items: center; padding: 24px; }
+  .sheet { max-width: 480px; border-radius: 20px; padding-bottom: 20px; }
+}
