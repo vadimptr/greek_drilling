@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AORIST_VERBS } from '../data/aorist'
-import { OPTION_COUNT, aoristWords, fillBlank, makeAoristTask, meaningKeys } from './aorist'
+import { OPTION_COUNT, aoristWords, fillBlank, makeAoristTask, meaningKeys, personsOf } from './aorist'
 
 const seq = (...vals: number[]) => {
   let i = 0
@@ -42,6 +42,13 @@ describe('makeAoristTask', () => {
   it('filters the word pool by group', () => {
     expect(aoristWords('all')).toHaveLength(AORIST_VERBS.length)
     expect(aoristWords('B2').length).toBe(AORIST_VERBS.filter((v) => v.group === 'B2').length)
+  })
+
+  it('accepts every person that shares the shown form', () => {
+    const eimai = AORIST_VERBS.find((v) => v.present === 'είμαι')!
+    expect(personsOf(eimai, 'ήταν')).toEqual([2, 5])
+    const grafo = AORIST_VERBS.find((v) => v.present === 'γράφω')!
+    expect(personsOf(grafo, 'γράψαμε')).toEqual([3])
   })
 
   it('capitalizes a form placed at the start of a sentence', () => {

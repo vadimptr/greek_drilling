@@ -702,8 +702,17 @@
 .aorist-groups { display: flex; flex-wrap: wrap; gap: 6px; }
 .aorist-group { border: 1px solid var(--border); background: var(--card); color: inherit; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
 .aorist-group-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.aorist-meta { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; color: var(--muted); }
-.aorist-badge { border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 1px 8px; font-size: 13px; font-weight: 600; }
+.aorist-steps { display: flex; justify-content: center; gap: 6px; }
+.aorist-step { border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; }
+.aorist-step-active { border-color: var(--accent); color: var(--accent); }
+.aorist-step-ok { border-color: var(--ok); color: var(--ok); }
+.aorist-step-bad { border-color: var(--bad); color: var(--bad); }
+.aorist-summary { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 15px; text-align: left; }
+.aorist-summary-mark { display: inline-block; width: 20px; font-weight: 700; }
+.aorist-summary-ok .aorist-summary-mark { color: var(--ok); }
+.aorist-summary-bad .aorist-summary-mark { color: var(--bad); }
+.options-groups { grid-template-columns: 1fr; gap: 8px; }
+.options-groups .option { min-height: 48px; padding: 8px 12px; font-size: 16px; }
 .options-6 { grid-template-columns: 1fr 1fr; gap: 8px; }
 .options-6 .option { min-height: 54px; padding: 8px 10px; font-size: 16px; line-height: 1.2; }
 .verb-examples { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }

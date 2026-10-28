@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristVerb } from '../data/aorist'
+import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristGroup, type AoristVerb } from '../data/aorist'
 import { AORIST_THEORY } from '../data/aorist/theory'
-import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, sentencesOf, verbsOf, type AoristTask, type GroupFilter } from '../logic/aorist'
+import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, personsOf, sentencesOf, verbsOf, type AoristTask, type GroupFilter } from '../logic/aorist'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
 import { initialSpeakState, type SpeakState } from '../logic/speakState'
@@ -9,7 +9,9 @@ import { applyAnswer, isWin } from '../logic/state'
 import { Section } from '../components/grammar/LessonExplanation'
 import { WinOverlay } from '../components/WinOverlay'
 
-const CORRECT_DELAY_MS = 900
+const CORRECT_DELAY_MS = 1400
+const STEP_DELAY_MS = 500
+const WRONG_STEP_DELAY_MS = 1200
 const speechAvailable = canSpeak()
 
 type View = 'theory' | 'verbs' | 'train'
@@ -47,7 +49,6 @@ function saveFilter(f: GroupFilter) {
 }
 
 const groupTitle = (g: AoristVerb['group']) => AORIST_GROUPS.find((x) => x.id === g)!.title
-const groupLabel = (g: AoristVerb['group']) => AORIST_GROUPS.find((x) => x.id === g)!.label
 
 function nextTask(state: SpeakState, filter: GroupFilter): AoristTask | null {
   const word = pickNext(state, aoristWords(filter))
@@ -197,18 +198,56 @@ function VerbRow({ verb, mark, open, onToggle }: { verb: AoristVerb; mark: 'weak
   )
 }
 
+type Step = 'ru' | 'group' | 'person'
+
+const STEPS: { id: Step; label: string; question: string }[] = [
+  { id: 'ru', label: 'Перевод', question: 'Как переводится глагол?' },
+  { id: 'group', label: 'Группа', question: 'К какой группе относится?' },
+  { id: 'person', label: 'Лицо', question: 'Какое лицо и число?' },
+]
+
+interface Picks {
+  ru?: string
+  group?: AoristGroup
+  person?: number
+}
+
+interface StepOption {
+  key: string
+  label: string
+  right: boolean
+  pick: Picks
+}
+
+function stepOptions(step: Step, task: AoristTask): StepOption[] {
+  if (step === 'ru') return task.options.map((o) => ({ key: o, label: o, right: o === task.answer, pick: { ru: o } }))
+  if (step === 'group')
+    return AORIST_GROUPS.map((g) => ({ key: g.id, label: g.title, right: g.id === task.verb.group, pick: { group: g.id } }))
+  const persons = personsOf(task.verb, task.form)
+  return PRONOUNS.map((p, i) => ({ key: p, label: `${p} · ${PRONOUN_RU[i]}`, right: persons.includes(i), pick: { person: i } }))
+}
+
+function isPicked(o: StepOption, picks: Picks): boolean {
+  return (
+    (o.pick.ru !== undefined && o.pick.ru === picks.ru) ||
+    (o.pick.group !== undefined && o.pick.group === picks.group) ||
+    (o.pick.person !== undefined && o.pick.person === picks.person)
+  )
+}
+
 function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
   const words = aoristWords(filter)
   const [task, setTask] = useState<AoristTask | null>(() => nextTask(state, filter))
-  const [picked, setPicked] = useState<string | null>(null)
+  const [picks, setPicks] = useState<Picks>({})
+  const [stepIndex, setStepIndex] = useState(0)
   const timer = useRef<number | null>(null)
 
-  useEffect(
-    () => () => {
-      if (timer.current !== null) window.clearTimeout(timer.current)
-    },
-    [],
-  )
+  const clearTimer = () => {
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = null
+  }
+
+  useEffect(() => clearTimer, [])
 
   useEffect(() => {
     if (task === null && !isWin(state, words)) setTask(nextTask(state, filter))
@@ -216,26 +255,13 @@ function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
 
   const advance = useCallback(
     (next: SpeakState) => {
-      setPicked(null)
+      clearTimer()
+      setPicks({})
+      setStepIndex(0)
       setTask(nextTask(next, filter))
     },
     [filter],
   )
-
-  const choose = (o: string) => {
-    if (!task || picked !== null) return
-    setPicked(o)
-    const correct = o === task.answer
-    const next = applyAnswer(state, task.verb.id, correct)
-    onChange(next)
-    if (speechAvailable) speak(task.form)
-    if (correct) {
-      timer.current = window.setTimeout(() => {
-        timer.current = null
-        advance(next)
-      }, CORRECT_DELAY_MS)
-    }
-  }
 
   const restart = () => {
     const next = initialSpeakState()
@@ -246,46 +272,105 @@ function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
   const won = isWin(state, words)
   if (!task) return <main className="nouns">{won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
 
-  const answered = picked !== null
-  const correct = picked === task.answer
-  const cardClass = !answered ? 'nouns-card' : correct ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
+  const results = {
+    ru: picks.ru === undefined ? undefined : picks.ru === task.answer,
+    group: picks.group === undefined ? undefined : picks.group === task.verb.group,
+    person: picks.person === undefined ? undefined : personsOf(task.verb, task.form).includes(picks.person),
+  }
+  const done = stepIndex >= STEPS.length
+  const step = STEPS[Math.min(stepIndex, STEPS.length - 1)]
+  const stepPicked = results[step.id] !== undefined
+  const allRight = done && results.ru && results.group && results.person
+  const options = stepOptions(step.id, task)
+
+  const choose = (o: StepOption) => {
+    if (stepPicked) return
+    const nextPicks = { ...picks, ...o.pick }
+    setPicks(nextPicks)
+    const last = stepIndex === STEPS.length - 1
+    if (!last) {
+      timer.current = window.setTimeout(() => {
+        timer.current = null
+        setStepIndex((i) => i + 1)
+      }, o.right ? STEP_DELAY_MS : WRONG_STEP_DELAY_MS)
+      return
+    }
+    const correct = nextPicks.ru === task.answer && nextPicks.group === task.verb.group && o.right
+    const next = applyAnswer(state, task.verb.id, correct)
+    onChange(next)
+    setStepIndex(STEPS.length)
+    if (speechAvailable) speak(task.form)
+    if (correct) {
+      timer.current = window.setTimeout(() => {
+        timer.current = null
+        advance(next)
+      }, CORRECT_DELAY_MS)
+    }
+  }
+
+  const cardClass = !done ? 'nouns-card' : allRight ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
+  const summary: { label: string; ok: boolean | undefined; value: string }[] = [
+    { label: 'Перевод', ok: results.ru, value: `${task.verb.present} — ${task.verb.ru}` },
+    { label: 'Группа', ok: results.group, value: groupTitle(task.verb.group) },
+    { label: 'Лицо', ok: results.person, value: `${PRONOUNS[task.person]} · ${PRONOUN_RU[task.person]}` },
+  ]
 
   return (
     <main className="nouns">
-      <div key={`${task.verb.id}-${task.person}-${answered ? (correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
-        <div className="aorist-meta">
-          <span className="aorist-badge">{groupLabel(task.verb.group)}</span>
-          <span>
-            {PRONOUNS[task.person]} · {PRONOUN_RU[task.person]}
-          </span>
+      <div key={`${task.verb.id}-${task.person}-${done ? (allRight ? 'ok' : 'bad') : ''}`} className={cardClass}>
+        <div className="aorist-steps">
+          {STEPS.map((s, i) => (
+            <span
+              key={s.id}
+              className={
+                results[s.id] === true
+                  ? 'aorist-step aorist-step-ok'
+                  : results[s.id] === false
+                    ? 'aorist-step aorist-step-bad'
+                    : i === stepIndex
+                      ? 'aorist-step aorist-step-active'
+                      : 'aorist-step'
+              }
+            >
+              {s.label}
+            </span>
+          ))}
         </div>
         <div className="nouns-form">{task.form}</div>
-        <div className="spell-ru">{answered ? `${task.verb.present} — ${task.verb.ru}` : 'Как переводится глагол?'}</div>
-        {answered && (
-          <div className="aorist-paradigm">
-            {groupTitle(task.verb.group)}
-            <br />
-            {paradigm(task.verb)}
-          </div>
+        {!done && <div className="spell-ru">{step.question}</div>}
+        {summary.some((r) => r.ok !== undefined) && (
+          <ul className="aorist-summary">
+            {summary
+              .filter((r) => r.ok !== undefined)
+              .map((r) => (
+                <li key={r.label} className={r.ok ? 'aorist-summary-ok' : 'aorist-summary-bad'}>
+                  <span className="aorist-summary-mark">{r.ok ? '✓' : '✗'}</span>
+                  {r.value}
+                </li>
+              ))}
+          </ul>
         )}
+        {done && <div className="aorist-paradigm">{paradigm(task.verb)}</div>}
       </div>
 
       <div className="spell-bottom">
-        <div className="options options-6">
-          {task.options.map((o) => (
-            <button
-              key={o}
-              className={
-                !answered ? 'option' : o === task.answer ? 'option option-correct' : o === picked ? 'option option-wrong' : 'option option-dim'
-              }
-              disabled={answered}
-              onClick={() => choose(o)}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-        {answered && !correct && (
+        {!done && (
+          <div className={step.id === 'group' ? 'options options-groups' : 'options options-6'}>
+            {options.map((o) => (
+              <button
+                key={o.key}
+                className={
+                  !stepPicked ? 'option' : o.right ? 'option option-correct' : isPicked(o, picks) ? 'option option-wrong' : 'option option-dim'
+                }
+                disabled={stepPicked}
+                onClick={() => choose(o)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {done && !allRight && (
           <div className="spell-row">
             <button className="primary-btn" onClick={() => advance(state)}>
               Дальше
@@ -294,7 +379,7 @@ function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
         )}
       </div>
 
-      {won && !answered && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}
+      {won && !done && stepIndex === 0 && !stepPicked && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}
     </main>
   )
 }

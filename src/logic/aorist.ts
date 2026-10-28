@@ -81,6 +81,10 @@ export function makeAoristTask(verb: AoristVerb, rng: Rng = Math.random): Aorist
   }
 }
 
+export function personsOf(verb: AoristVerb, form: string): number[] {
+  return verb.forms.flatMap((f, p) => (f === form ? [p] : []))
+}
+
 export function paradigm(verb: AoristVerb): string {
   return verb.forms.map((f, p) => `${PRONOUNS[p]} ${f}`).join(', ')
 }
