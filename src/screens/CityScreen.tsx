@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, newGame, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
@@ -56,6 +56,7 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
   speedRef.current = speed
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const [storyStartedAt, setStoryStartedAt] = useState(0)
+  const [levelCheck, setLevelCheck] = useState<{ who: string; check: LevelCheck } | null>(null)
   const [gameAt, setGameAt] = useState(() => Date.now())
   const freshTimer = useRef<number | undefined>(undefined)
 
@@ -146,7 +147,15 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
     setSpeaking(false)
     const g = gameRef.current
     const from = currentRef.current
-    if (g && from && linesRef.current.length) void saveLines(g.id, from, linesRef.current).then(applyIfCurrent).catch(() => undefined)
+    if (g && from && linesRef.current.length) {
+      const who = g.notebook.find((p) => p.id === from)?.name ?? ''
+      void saveLines(g.id, from, linesRef.current)
+        .then((r) => {
+          applyIfCurrent(r.game)
+          if (r.check && gameRef.current?.id === g.id) setLevelCheck({ who, check: r.check })
+        })
+        .catch(() => undefined)
+    }
     const target = pendingRef.current
     pendingRef.current = null
     if (walkAwayRef.current) {
@@ -225,6 +234,7 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
   const connectTo = async (g: CityGame, characterId: string, from: string | null) => {
     setError(null)
     setNotice(null)
+    setLevelCheck(null)
     setPhase('connecting')
     const seq = ++callSeq.current
     try {
@@ -408,6 +418,20 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
             )}
             {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
           </div>
+          {levelCheck && phase === 'idle' && (
+            <Tip
+              text={
+                levelCheck.check.issues.length
+                  ? levelCheck.check.issues.map((i) => `«${i.text}» — ${i.reason}`).join('\n')
+                  : `Все реплики подходят для ${levelCheck.check.level}`
+              }
+            >
+              <span className={levelCheck.check.issues.length ? 'city-level city-level-warn' : 'city-level'}>
+                📏 {levelCheck.who}: {levelCheck.check.total - levelCheck.check.issues.length} из {levelCheck.check.total} реплик по уровню{' '}
+                {levelCheck.check.level}
+              </span>
+            </Tip>
+          )}
           <div className="city-dock-row">
             <div className="city-dock-side">
               {allowed && (

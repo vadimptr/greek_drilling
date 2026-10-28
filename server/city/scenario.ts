@@ -130,9 +130,18 @@ export const SCENARIO_SCHEMA = {
 } as const
 
 const LEVEL_STYLE: Record<Level, string> = {
-  A1: 'CEFR A1: very short sentences of 3-7 words, only the most common words, present tense, speak slowly and clearly',
-  A2: 'CEFR A2: short simple sentences, everyday vocabulary, mostly present and simple past, speak clearly',
-  B1: 'CEFR B1: natural everyday speech with simple subordinate clauses, avoid rare words and idioms',
+  A1: `CEFR A1, strictly:
+  - Each reply is ONE short sentence of at most 8 words; at most two such sentences only when really needed.
+  - Grammar: present tense, imperative and «θέλω να» + verb only. No past tenses, no future with «θα», no perfect («έχω κάνει»), no passive, no subordinate clauses.
+  - Vocabulary: only the most frequent everyday words (greetings, numbers, prices, time, food, family, places in town, weather). No idioms, no slang, no rare words.`,
+  A2: `CEFR A2, strictly:
+  - Each reply is 1-2 short sentences of at most 12 words each.
+  - Grammar: present, simple past (aorist), future with «θα», imperative, simple «να» and «γιατί» clauses. No perfect tenses, no passive, no long subordinate clauses.
+  - Vocabulary: common everyday words; if you need a rarer word, explain it with simple words.`,
+  B1: `CEFR B1:
+  - Each reply is up to 2-3 sentences.
+  - Natural everyday speech; simple subordinate clauses and all common tenses are fine.
+  - Avoid rare words, idioms and dialect; rephrase if the tourist does not understand.`,
 }
 
 export function scenarioRequest(level: Level, recentGoals: string[]): string {
@@ -217,6 +226,7 @@ export function card(c: Character): CharacterCard {
 const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
 export interface Meeting {
+  levelNotes?: string[]
   met: string[]
   cameFrom: string | null
   mood: Mood
@@ -238,7 +248,7 @@ const MOOD_EN: Record<Mood, string> = {
 }
 
 export function buildPersona(s: Scenario, characterId: string, level: Level, meeting: Meeting): Persona {
-  const { met, cameFrom, mood, previous } = meeting
+  const { met, cameFrom, mood, previous, levelNotes = [] } = meeting
   const c = s.characters.find((x) => x.id === characterId)
   if (!c) throw new Error(`unknown character ${characterId}`)
   const byId = (id: string) => s.characters.find((x) => x.id === id)!
@@ -279,11 +289,13 @@ You are talking face to face with a tourist who has just arrived by ferry and is
 ${history}
 ${earlier}
 Your mood towards the tourist right now: ${MOOD_EN[mood]}.
-
+${levelNotes.length ? `\nLast time some of your phrases were too difficult for the tourist's level. Avoid this:\n${levelNotes.map((n) => `- ${n}`).join('\n')}\n` : ''}
 Language rules (most important):
 - Speak ONLY Greek. Never switch to Russian, English or any other language, even if asked; if the tourist does not understand, rephrase in simpler Greek or speak slower.
-- Level: ${LEVEL_STYLE[level]}.
-- Keep each reply short: 1-2 sentences, like in a real conversation. Ask the tourist questions back sometimes.
+- Level rules — follow them in every single reply, even when you are emotional:
+${LEVEL_STYLE[level]}
+- Always address the tourist informally with «εσύ» (σου, σε), never «εσείς» or «σας».
+- Ask the tourist questions back sometimes.
 - If the tourist makes a mistake, do not lecture; just answer naturally, using the correct form yourself.
 
 What you know: ${c.knows}

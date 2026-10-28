@@ -52,6 +52,15 @@ export function migrateCity(db: DatabaseSync): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS ix_city_talks_user ON city_talks(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS city_level_checks (
+      id INTEGER PRIMARY KEY,
+      game_id TEXT NOT NULL REFERENCES city_games(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL,
+      level TEXT NOT NULL,
+      total INTEGER NOT NULL,
+      issues TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS city_lines (
       id INTEGER PRIMARY KEY,
       game_id TEXT NOT NULL REFERENCES city_games(id) ON DELETE CASCADE,
@@ -184,4 +193,22 @@ export function linesFor(db: DatabaseSync, game: Game, characterId: string, limi
 
 export function everyGame(db: DatabaseSync): Game[] {
   return (db.prepare('SELECT * FROM city_games').all() as unknown as GameRow[]).map(toGame)
+}
+
+export interface LevelCheck {
+  level: string
+  total: number
+  issues: { text: string; reason: string; note: string }[]
+}
+
+export function addLevelCheck(db: DatabaseSync, game: Game, characterId: string, check: LevelCheck): void {
+  db.prepare('INSERT INTO city_level_checks (game_id, character_id, level, total, issues, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+    game.id, characterId, check.level, check.total, JSON.stringify(check.issues), now(),
+  )
+}
+
+export function recentLevelNotes(db: DatabaseSync, game: Game, limit: number): string[] {
+  const rows = db.prepare('SELECT issues FROM city_level_checks WHERE game_id = ? ORDER BY id DESC LIMIT 3').all(game.id) as { issues: string }[]
+  const notes = rows.flatMap((r) => (JSON.parse(r.issues) as LevelCheck['issues']).map((i) => i.note))
+  return [...new Set(notes)].slice(0, limit)
 }

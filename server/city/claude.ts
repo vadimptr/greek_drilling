@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator } from './providers.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
 import { SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario } from './scenario.ts'
 
 const MODEL = 'claude-opus-5-5'
@@ -107,5 +107,57 @@ export function claudeTranslator(apiKey: string): Translator {
         'Translate the Russian text into simple, natural modern Greek for a learner (A2 level). Keep names as they are in Greek. Reply with the translation only, no quotes or comments.',
         russian,
       ),
+  }
+}
+
+const LEVEL_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['issues'],
+  properties: {
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['index', 'reason_ru', 'note_en'],
+        properties: { index: { type: 'integer' }, reason_ru: { type: 'string' }, note_en: { type: 'string' } },
+      },
+    },
+  },
+} as const
+
+export function claudeLevels(apiKey: string): LevelChecker {
+  const client = new Anthropic({ apiKey, timeout: 60_000 })
+  return {
+    async check(level, lines) {
+      const list = lines.map((l, i) => `${i}: ${l}`).join('\n')
+      const response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 6000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: LEVEL_SCHEMA } },
+        messages: [
+          {
+            role: 'user',
+            content: `A Greek-speaking character talks to a learner of Greek whose level is CEFR ${level}. Rules for the character at this level:
+- A1: one short sentence (≤ 8 words) per reply, present tense / imperative / «θέλω να» only, the most frequent everyday words.
+- A2: 1-2 short sentences (≤ 12 words each), present, aorist, future with «θα», imperative, simple «να» clauses; no perfect, no passive.
+- B1: up to 2-3 sentences, everyday speech, no rare words or idioms.
+Always informal «εσύ».
+
+Character's replies (numbered):
+${list}
+
+List only the replies that are clearly too difficult for ${level} or break the rules (too long, grammar above the level, rare words, formal «εσείς»). For each: index, reason_ru — a short reason in Russian naming the exact word or form («перфект "έχεις κάψει"», «слишком длинная реплика: 4 предложения», «редкое слово "αγχώνομαι"»), note_en — a short instruction in English for the character to avoid it next time. Ignore small things. Return an empty list if all replies fit.`,
+          },
+        ],
+      })
+      if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to check the level')
+      const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
+      const parsed = JSON.parse(text) as { issues?: { index: number; reason_ru: string; note_en: string }[] }
+      return (parsed.issues ?? []).filter((x) => Number.isInteger(x.index) && x.index >= 0 && x.index < lines.length)
+    },
   }
 }

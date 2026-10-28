@@ -123,8 +123,14 @@ export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/ci
 export const newGame = (level: Level) => call<{ game: CityGame }>('POST', '/api/city/games', { level }).then((r) => r.game)
 export const talk = (gameId: string, characterId: string, from: string | null, speed: number) =>
   call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed })
+export interface LevelCheck {
+  level: string
+  total: number
+  issues: { text: string; reason: string }[]
+}
+
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines }).then((r) => r.game)
+  call<{ game: CityGame; check: LevelCheck | null }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines })
 export const setMood = (gameId: string, characterId: string, mood: string, reason: string) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/mood`, { characterId, mood, reason }).then((r) => r.game)
 export const revealFacts = (gameId: string, characterId: string, factIds: string[]) =>

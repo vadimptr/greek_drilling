@@ -1,4 +1,4 @@
-import { Conversation, type SessionConfig } from '@elevenlabs/client'
+import { Conversation, stripAudioTags, type SessionConfig } from '@elevenlabs/client'
 import type { VoiceConnector } from './voice'
 
 type Overrides = NonNullable<SessionConfig['overrides']>
@@ -17,7 +17,7 @@ export const connect: VoiceConnector = async (connection, h) => {
       set_mood: (params: Record<string, unknown>) => h.onTool('set_mood', params ?? {}),
       walk_away: (params: Record<string, unknown>) => h.onTool('walk_away', params ?? {}),
     },
-    onMessage: ({ message, role }) => h.onLine(role === 'user' ? 'user' : 'agent', message),
+    onMessage: ({ message, role }) => h.onLine(role === 'user' ? 'user' : 'agent', stripAudioTags(message).replace(/\s{2,}/g, ' ').trim()),
     onModeChange: ({ mode }) => h.onMode(mode),
     onDisconnect: () => h.onEnd(),
     onError: (message) => h.onError(message),

@@ -8,6 +8,16 @@ export interface FactMatcher {
   match(speaker: string, lines: { role: string; text: string }[], facts: { id: string; text: string }[]): Promise<string[]>
 }
 
+export interface LevelIssue {
+  index: number
+  reason_ru: string
+  note_en: string
+}
+
+export interface LevelChecker {
+  check(level: string, lines: string[]): Promise<LevelIssue[]>
+}
+
 export interface Translator {
   toRussian(greek: string): Promise<string>
   toGreek(russian: string): Promise<string>

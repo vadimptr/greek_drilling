@@ -4,10 +4,10 @@ import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
-import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
-  abandonActive, addFound, addHeard, addLines, allGames, everyGame, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
 } from './store.ts'
 
@@ -17,6 +17,7 @@ export interface CityDeps {
   scenarios: ScenarioGenerator | null
   facts: FactMatcher | null
   translator: Translator | null
+  levels?: LevelChecker | null
   voice: VoiceProvider | null
   scenes: SceneStore | null
 }
@@ -26,6 +27,10 @@ const MAX_LINES = 200
 const MAX_LINE = 2000
 const MAX_TRANSLATE = 500
 const CACHE_SIZE = 1000
+
+export function stripTags(text: string): string {
+  return text.replace(/\[[^\]\n]{1,40}\]/g, ' ').replace(/\s{2,}/g, ' ').trim()
+}
 
 export function parseAllowed(raw: string | undefined): string[] {
   return (raw ?? '').split(',').map((n) => n.trim()).filter(Boolean)
@@ -297,6 +302,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         cameFrom: from,
         mood: game.moods[characterId] ?? 'friendly',
         previous: linesFor(db, game, characterId, 16),
+        levelNotes: recentLevelNotes(db, game, 6),
       })
       if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
@@ -311,20 +317,40 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       const raw = Array.isArray(body.lines) ? body.lines.slice(0, MAX_LINES) : []
       const lines = raw
         .filter((l): l is { role: string; text: string } => typeof l?.text === 'string' && (l.role === 'user' || l.role === 'agent'))
-        .map((l) => ({ role: l.role, text: l.text.slice(0, MAX_LINE) }))
+        .map((l) => ({ role: l.role, text: stripTags(l.text).slice(0, MAX_LINE) }))
+        .filter((l) => l.text)
       addLines(db, game, characterId, lines)
       const said = lines.filter((l) => l.role === 'agent').map((l) => l.text).join(' ')
       addHeard(db, game, mentioned(game.scenario, said).filter((id) => id !== characterId))
       const open = tellableBy(game.scenario, characterId).filter((f) => !game.found.includes(f.id))
-      if (deps.facts && open.length && lines.some((l) => l.role === 'agent')) {
-        try {
-          const ids = await deps.facts.match(character.name_el, lines, open.map((f) => ({ id: f.id, text: f.text_en })))
-          discover(game, characterId, ids)
-        } catch (e) {
-          console.error(e)
-        }
-      }
-      send(res, 200, { game: view(game) })
+      const agentLines = lines.filter((l) => l.role === 'agent').map((l) => l.text)
+      const matching =
+        deps.facts && open.length && agentLines.length
+          ? deps.facts
+              .match(character.name_el, lines, open.map((f) => ({ id: f.id, text: f.text_en })))
+              .then((ids) => discover(game, characterId, ids))
+              .catch((e) => console.error(e))
+          : Promise.resolve()
+      const checking: Promise<LevelCheck | null> =
+        deps.levels && agentLines.length
+          ? deps.levels
+              .check(game.level, agentLines)
+              .then((issues) => {
+                const check = {
+                  level: game.level,
+                  total: agentLines.length,
+                  issues: issues.map((i) => ({ text: agentLines[i.index], reason: i.reason_ru, note: i.note_en })),
+                }
+                addLevelCheck(db, game, characterId, check)
+                return check
+              })
+              .catch((e) => {
+                console.error(e)
+                return null
+              })
+          : Promise.resolve(null)
+      const [, check] = await Promise.all([matching, checking])
+      send(res, 200, { game: view(game), check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) } })
       return true
     }
 

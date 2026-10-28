@@ -53,3 +53,23 @@ export function elevenLabsVoice(cfg: ElevenLabsConfig, fetchImpl: typeof fetch =
     },
   }
 }
+
+export async function dropModeratedVoices(cfg: ElevenLabsConfig, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+  const dropped: string[] = []
+  for (const [slot, ids] of Object.entries(cfg.voices) as [VoiceSlot, string[]][]) {
+    const usable: string[] = []
+    for (const id of ids) {
+      try {
+        const res = await fetchImpl(`https://api.elevenlabs.io/v1/voices/${id}`, { headers: { 'xi-api-key': cfg.apiKey } })
+        const v = res.ok ? ((await res.json()) as { sharing?: { live_moderation_enabled?: boolean } }) : null
+        if (!res.ok || v?.sharing?.live_moderation_enabled) dropped.push(id)
+        else usable.push(id)
+      } catch {
+        usable.push(id)
+      }
+    }
+    if (usable.length) cfg.voices[slot] = usable
+    else delete cfg.voices[slot]
+  }
+  return dropped
+}

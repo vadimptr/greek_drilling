@@ -4,10 +4,10 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createApp } from '../app.ts'
 import { openDb } from '../db.ts'
-import { elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
+import { dropModeratedVoices, elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
 import type { CityDeps } from './routes.ts'
 import { buildPersona, validateScenario, type Fact, type Scenario } from './scenario.ts'
-import { leaderboard, mentioned } from './routes.ts'
+import { leaderboard, mentioned, stripTags } from './routes.ts'
 import type { Game } from './store.ts'
 
 const SECRET = 'test-secret-0123456789'
@@ -335,4 +335,33 @@ test('leaderboard ranks players per category, hides other names, keeps you visib
   assert.deepEqual(boards.find((b) => b.category === 'quests')!.rows.map((r) => [r.rank, r.value, r.you]), [[1, 2, false], [2, 1, false], [3, 0, true]])
   const lonely = leaderboard([], 7, () => 'me')
   assert.deepEqual(lonely[0].rows, [{ rank: 1, value: 0, you: true, name: 'me' }])
+})
+
+test('audio tags are stripped from lines; level check is returned and its notes reach the next persona', async () => {
+  const { call, login, opened, close } = await start({
+    facts: null,
+    levels: { check: async (_level, lines) => (lines.length > 1 ? [{ index: 1, reason_ru: 'перфект «έχεις κάψει»', note_en: 'Do not use the perfect tense.' }] : []) },
+  })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', { level: 'A1' }, me)).body.game
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  const res = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
+    { role: 'agent', text: '[happy] Γεια σου!' },
+    { role: 'agent', text: 'Έχεις κάψει πολύ! [concerned]' },
+  ] }, me)).body
+  assert.deepEqual(res.check, { level: 'A1', total: 2, issues: [{ text: 'Έχεις κάψει πολύ!', reason: 'перфект «έχεις κάψει»' }] })
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  assert.match(opened[1], /too difficult[\s\S]*Do not use the perfect tense/)
+  assert.match(opened[1], /Γεια σου!/)
+  assert.doesNotMatch(opened[1], /\[happy\]/)
+  assert.match(opened[1], /never «εσείς»/)
+  await close()
+})
+
+test('stripTags and moderated voices', async () => {
+  assert.equal(stripTags('[excited] [laugh] Καλώς ήρθατε! [slow]'), 'Καλώς ήρθατε!')
+  const cfg = { apiKey: 'k', agentId: 'a', speed: 1, voices: parseVoices('female-young=bad|good,male=bad') }
+  const fake = (async (u: string) => new Response(JSON.stringify({ sharing: { live_moderation_enabled: u.endsWith('/bad') } }))) as typeof fetch
+  assert.deepEqual(await dropModeratedVoices(cfg, fake), ['bad', 'bad'])
+  assert.deepEqual(cfg.voices, { 'female-young': ['good'] })
 })

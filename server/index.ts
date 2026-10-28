@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { createApp } from './app.ts'
-import { claudeFacts, claudeScenarios, claudeTranslator } from './city/claude.ts'
-import { elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
+import { claudeFacts, claudeLevels, claudeScenarios, claudeTranslator } from './city/claude.ts'
+import { dropModeratedVoices, elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
 import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
 import { openDb } from './db.ts'
@@ -14,21 +14,26 @@ if (!secret || secret.length < 16) {
 }
 
 const env = process.env
+const voiceConfig =
+  env.ELEVENLABS_API_KEY && env.ELEVENLABS_AGENT_ID
+    ? {
+        apiKey: env.ELEVENLABS_API_KEY,
+        agentId: env.ELEVENLABS_AGENT_ID,
+        voices: parseVoices(env.ELEVENLABS_VOICES),
+        speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
+      }
+    : null
+if (voiceConfig) {
+  void dropModeratedVoices(voiceConfig).then((ids) => ids.length && console.error(`voices dropped (live moderation or missing): ${ids.join(', ')}`))
+}
 const city = {
   allowedUsers: parseAllowed(env.CITY_ALLOWED_USERS),
   dailyTalks: Number(env.CITY_DAILY_TALKS ?? 40),
   scenarios: env.ANTHROPIC_API_KEY ? claudeScenarios(env.ANTHROPIC_API_KEY) : null,
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,
   translator: env.ANTHROPIC_API_KEY ? claudeTranslator(env.ANTHROPIC_API_KEY) : null,
-  voice:
-    env.ELEVENLABS_API_KEY && env.ELEVENLABS_AGENT_ID
-      ? elevenLabsVoice({
-          apiKey: env.ELEVENLABS_API_KEY,
-          agentId: env.ELEVENLABS_AGENT_ID,
-          voices: parseVoices(env.ELEVENLABS_VOICES),
-          speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
-        })
-      : null,
+  levels: env.ANTHROPIC_API_KEY ? claudeLevels(env.ANTHROPIC_API_KEY) : null,
+  voice: voiceConfig ? elevenLabsVoice(voiceConfig) : null,
 }
 
 const dataDir = dirname(env.DB_PATH ?? 'data/gd.db')
