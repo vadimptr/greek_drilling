@@ -97,6 +97,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
   const endingRef = useRef(false)
   const pausingRef = useRef(false)
   const lastActivityRef = useRef(0)
+  const meterRef = useRef(false)
   const idleRef = useRef(idleSeconds)
   idleRef.current = idleSeconds
   const lastSpokeRef = useRef<string | null>(null)
@@ -224,6 +225,9 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       if (subsRef.current) void translateCached(text).catch(() => undefined)
       setLines(linesRef.current)
     },
+    onMeter: () => {
+      if (seq === callSeq.current) meterRef.current = true
+    },
     onVoice: (score) => {
       if (seq === callSeq.current && score > 0.6) lastActivityRef.current = Date.now()
     },
@@ -297,6 +301,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
         if (!drawn) setNotice('Картинку нарисовать не получилось — играем без неё')
       }
       setPhase('connecting')
+      meterRef.current = false
       const t = await talk(g.id, characterId, from, speedRef.current, resume)
       if (seq !== callSeq.current) return
       applyGame(t.game)
@@ -388,7 +393,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     if (phase !== 'talking') return
     const timer = window.setInterval(() => {
       const idle = idleRef.current * 1000
-      if (!idle || modeRef.current !== 'listening' || pendingRef.current || endingRef.current || walkAwayRef.current || pausingRef.current) return
+      if (!idle || !meterRef.current || modeRef.current !== 'listening' || pendingRef.current || endingRef.current || walkAwayRef.current || pausingRef.current) return
       if (Date.now() - lastActivityRef.current > idle) {
         pausingRef.current = true
         leave()

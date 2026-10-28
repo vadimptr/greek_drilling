@@ -4,6 +4,7 @@ import type { VoiceConnector } from './voice'
 type Overrides = NonNullable<SessionConfig['overrides']>
 
 export const connect: VoiceConnector = async (connection, h) => {
+  let meter = 0
   const conversationToken = String(connection.conversationToken ?? '')
   const overrides = (connection.overrides ?? {}) as Overrides
   const conversation = await Conversation.startSession({
@@ -22,8 +23,27 @@ export const connect: VoiceConnector = async (connection, h) => {
     onMessage: ({ message, role }) => h.onLine(role === 'user' ? 'user' : 'agent', stripAudioTags(message).replace(/\s{2,}/g, ' ').trim()),
     onModeChange: ({ mode }) => h.onMode(mode),
     onVadScore: ({ vadScore }) => h.onVoice?.(vadScore),
-    onDisconnect: () => h.onEnd(),
+    onDisconnect: () => {
+      window.clearInterval(meter)
+      h.onEnd()
+    },
     onError: (message) => h.onError(message),
   })
-  return { end: () => conversation.endSession() }
+  let noise = 0.02
+  let alive = false
+  meter = window.setInterval(() => {
+    const volume = conversation.getInputVolume()
+    if (!alive && volume > 0) {
+      alive = true
+      h.onMeter?.()
+    }
+    if (volume > Math.max(0.05, noise * 2.5)) h.onVoice?.(1)
+    else noise = noise * 0.95 + volume * 0.05
+  }, 100)
+  return {
+    end: () => {
+      window.clearInterval(meter)
+      return conversation.endSession()
+    },
+  }
 }

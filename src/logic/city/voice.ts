@@ -6,6 +6,7 @@ export interface VoiceHandlers {
   onLine(role: 'user' | 'agent', text: string): void
   onMode(mode: 'speaking' | 'listening'): void
   onVoice?(score: number): void
+  onMeter?(): void
   onTool(name: ToolName, params: Record<string, unknown>): string
   onEnd(): void
   onError(message: string): void
