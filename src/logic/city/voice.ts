@@ -1,6 +1,6 @@
 import type { VoiceSession } from './api'
 
-export type ToolName = 'go_to' | 'goal_completed'
+export type ToolName = 'go_to' | 'goal_completed' | 'reveal_fact'
 
 export interface VoiceHandlers {
   onLine(role: 'user' | 'agent', text: string): void

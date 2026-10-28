@@ -10,6 +10,7 @@ export interface Game {
   level: Level
   scenario: Scenario
   met: string[]
+  found: string[]
   status: GameStatus
 }
 
@@ -19,6 +20,7 @@ interface GameRow {
   level: Level
   scenario: string
   met: string
+  found: string
   status: GameStatus
 }
 
@@ -53,6 +55,8 @@ export function migrateCity(db: DatabaseSync): void {
       created_at TEXT NOT NULL
     );
   `)
+  const cols = db.prepare('PRAGMA table_info(city_games)').all() as { name: string }[]
+  if (!cols.some((c) => c.name === 'found')) db.exec("ALTER TABLE city_games ADD COLUMN found TEXT NOT NULL DEFAULT '[]'")
 }
 
 const toGame = (r: GameRow): Game => ({
@@ -61,6 +65,7 @@ const toGame = (r: GameRow): Game => ({
   level: r.level,
   scenario: JSON.parse(r.scenario),
   met: JSON.parse(r.met),
+  found: JSON.parse(r.found),
   status: r.status,
 })
 
@@ -72,7 +77,7 @@ export function createGame(db: DatabaseSync, userId: number, level: Level, scena
   db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, userId, level, JSON.stringify(scenario), t, t,
   )
-  return { id, userId, level, scenario, met: [], status: 'active' }
+  return { id, userId, level, scenario, met: [], found: [], status: 'active' }
 }
 
 export function findGame(db: DatabaseSync, userId: number, id: string): Game | undefined {
@@ -125,4 +130,16 @@ export function addLines(db: DatabaseSync, game: Game, characterId: string, line
   const stmt = db.prepare('INSERT INTO city_lines (game_id, character_id, role, text, created_at) VALUES (?, ?, ?, ?, ?)')
   const t = now()
   for (const l of lines) stmt.run(game.id, characterId, l.role, l.text, t)
+}
+
+export function addFound(db: DatabaseSync, game: Game, factIds: string[]): string[] {
+  const added = factIds.filter((id) => !game.found.includes(id))
+  if (!added.length) return added
+  game.found.push(...added)
+  db.prepare('UPDATE city_games SET found = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.found), now(), game.id)
+  return added
+}
+
+export function allGames(db: DatabaseSync, userId: number): Game[] {
+  return (db.prepare('SELECT * FROM city_games WHERE user_id = ?').all(userId) as unknown as GameRow[]).map(toGame)
 }

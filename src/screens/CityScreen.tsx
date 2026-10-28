@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, saveLines, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, newGame, revealFacts, saveLines, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
+import { Notebook } from '../components/city/Notebook'
 import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
@@ -13,12 +14,14 @@ interface Props {
   signedIn: boolean
   level: Level
   onSignIn: () => void
+  onTotal: (total: number) => void
 }
 
 const SUBS_KEY = 'greek_drilling.city.subs'
 const LEAVE_AFTER_SPEECH_MS = 900
 const LEAVE_IF_SILENT_MS = 2500
 const WALK_MS = 1200
+const FRESH_MS = 4000
 
 function readSubs(): boolean {
   try {
@@ -34,7 +37,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
+export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -42,6 +45,8 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
   const [speaking, setSpeaking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [subs, setSubs] = useState(readSubs)
+  const [fresh, setFresh] = useState<Set<string>>(new Set())
+  const freshTimer = useRef<number | undefined>(undefined)
 
   const gameRef = useRef<CityGame | null>(null)
   const currentRef = useRef<string | null>(null)
@@ -54,8 +59,24 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
   const callSeq = useRef(0)
 
   const applyGame = (g: CityGame | null) => {
+    const prev = gameRef.current
+    if (g && prev && g.id === prev.id) {
+      const before = new Set(prev.notebook.flatMap((p) => p.facts.map((f) => f.id)))
+      const added = g.notebook.flatMap((p) => p.facts.filter((f) => f.points > 0 && !before.has(f.id)).map((f) => f.id))
+      if (added.length) {
+        setFresh(new Set(added))
+        window.clearTimeout(freshTimer.current)
+        freshTimer.current = window.setTimeout(() => setFresh(new Set()), FRESH_MS)
+      }
+    }
+    if (g?.status === 'won' && callRef.current) wonRef.current = true
     gameRef.current = g
     setGame(g)
+    if (g) onTotal(g.total)
+  }
+
+  const applyIfCurrent = (g: CityGame) => {
+    if (gameRef.current?.id === g.id) applyGame(g)
   }
 
   useEffect(() => {
@@ -78,6 +99,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
     return () => {
       alive = false
       window.clearTimeout(timerRef.current)
+      window.clearTimeout(freshTimer.current)
       callSeq.current++
       void callRef.current?.end()
     }
@@ -110,7 +132,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
     setSpeaking(false)
     const g = gameRef.current
     const from = currentRef.current
-    if (g && from && linesRef.current.length) void saveLines(g.id, from, linesRef.current).catch(() => undefined)
+    if (g && from && linesRef.current.length) void saveLines(g.id, from, linesRef.current).then(applyIfCurrent).catch(() => undefined)
     const target = pendingRef.current
     pendingRef.current = null
     if (wonRef.current) {
@@ -148,9 +170,14 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
         scheduleLeave(modeRef.current === 'listening' ? LEAVE_IF_SILENT_MS : 15_000)
         return 'ok'
       }
+      if (name === 'reveal_fact') {
+        const factId = String(params.fact_id ?? '')
+        if (factId) void revealFacts(g.id, current, [factId]).then(applyIfCurrent).catch(() => undefined)
+        return 'ok'
+      }
       completeGame(g.id, current)
         .then((done) => {
-          applyGame(done)
+          applyIfCurrent(done)
           wonRef.current = true
         })
         .catch(() => undefined)
@@ -231,6 +258,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
 
   return (
+    <div className="city-layout">
     <main className="speak city">
       <div className="speak-card city-scene">
         {phase === 'generating' && <div className="city-hint">Придумываю историю…</div>}
@@ -313,5 +341,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn }: Props) {
         </div>
       </div>
     </main>
+      {allowed && game && <Notebook people={game.notebook} score={game.score} fresh={fresh} />}
+    </div>
   )
 }

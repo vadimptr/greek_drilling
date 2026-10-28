@@ -47,6 +47,7 @@ export default function App() {
   const [accountOpen, setAccountOpen] = useState(false)
   const account = useAccount(app, setApp, boot.user)
   const [cityAllowed, setCityAllowed] = useState<boolean | null>(null)
+  const [cityTotal, setCityTotal] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -55,7 +56,11 @@ export default function App() {
       return
     }
     setCityAllowed(null)
-    cityAccess().then((r) => alive && setCityAllowed(r.allowed))
+    cityAccess().then((r) => {
+      if (!alive) return
+      setCityAllowed(r.allowed)
+      setCityTotal(r.total)
+    })
     return () => {
       alive = false
     }
@@ -128,7 +133,7 @@ export default function App() {
     subtitle = `${level} · написано ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'city') {
-    left = { icon: '🌊', value: CITY_NAME, label: 'Город' }
+    left = { icon: '⭐', value: cityTotal, label: 'Очки за факты', bump: true }
     right = { icon: '🗣️', value: level, label: 'Уровень' }
     subtitle = `${CITY_NAME} · жители говорят на уровне ${level}`
     progress = null
@@ -176,7 +181,7 @@ export default function App() {
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'city' && (
-          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} onSignIn={() => setAccountOpen(true)} />
+          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
         )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>

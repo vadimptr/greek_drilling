@@ -6,7 +6,7 @@ import { createApp } from '../app.ts'
 import { openDb } from '../db.ts'
 import { elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
 import type { CityDeps } from './routes.ts'
-import { buildPersona, validateScenario, type Scenario } from './scenario.ts'
+import { buildPersona, validateScenario, type Fact, type Scenario } from './scenario.ts'
 
 const SECRET = 'test-secret-0123456789'
 
@@ -25,7 +25,21 @@ function scenario(): Scenario {
       { ...base, id: 'yiannis', name_el: 'Γιάννης', name_ru: 'Яннис', role_ru: 'рыбак', place_el: 'λιμάνι', place_ru: 'пристань',
         knows: 'caught 5 kg of sardines, 6 euro per kilo', refers_to: [] },
     ],
+    facts: [
+      fact('f1', 'eleni', 'на вид лет двадцать', 0, { initial: true }),
+      fact('f2', 'eleni', 'учится в Салониках', 10),
+      fact('f3', 'kostas', 'на вид лет пятьдесят', 0, { initial: true }),
+      fact('f4', 'yiannis', 'учился в Афинах', 12, { known_by: ['eleni', 'ghost'] }),
+      fact('f5', 'yiannis', 'поймал 5 кг сардин', 25, { goal: true }),
+      fact('f6', 'yiannis', 'сардины по 6 евро', 25, { goal: true }),
+      fact('f6', 'yiannis', 'дубль', 5),
+      fact('f7', 'ghost', 'призрак', 5),
+    ],
   }
+}
+
+function fact(id: string, about: string, text_ru: string, points: number, extra: Partial<Fact> = {}): Fact {
+  return { id, about, text_ru, text_en: text_ru, points, initial: false, goal: false, known_by: [], ...extra }
 }
 
 async function start(overrides: Partial<CityDeps> = {}) {
@@ -35,6 +49,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
     allowedUsers: ['Vadim'],
     dailyTalks: 10,
     scenarios: { generate: async () => validateScenario(scenario()) },
+    facts: { match: async (_speaker, _lines, facts) => facts.filter((f) => f.id === 'f5').map((f) => f.id) },
     voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
     ...overrides,
   }
@@ -56,7 +71,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
 
 test('city is visible only to allowed users', async () => {
   const { call, login, close } = await start()
-  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, city: 'Μυθόπολη' })
+  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, city: 'Μυθόπολη', total: 0 })
   const guest = await login('Guest')
   assert.equal((await call('GET', '/api/city', undefined, guest)).body.allowed, false)
   assert.equal((await call('POST', '/api/city/games', {}, guest)).status, 403)
@@ -87,7 +102,7 @@ test('game flow: start character, referral chain, completion only by the solver'
   assert.equal((await call('POST', `/api/city/games/${game.id}/complete`, { characterId: 'kostas' }, me)).status, 409)
   assert.equal((await talk('yiannis', 'kostas')).status, 200)
   assert.match(opened[2], /call the tool goal_completed/)
-  assert.equal((await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'user', text: 'Γεια' }] }, me)).status, 204)
+  assert.equal((await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'user', text: 'Γεια' }] }, me)).status, 200)
   const done = await call('POST', `/api/city/games/${game.id}/complete`, { characterId: 'yiannis' }, me)
   assert.equal(done.body.game.status, 'won')
   assert.equal((await talk('yiannis')).status, 409)
@@ -162,4 +177,40 @@ test('voices rotate within a slot and fall back to the nearest age', () => {
   assert.equal(pickVoice(voices, 'female', 'old', 1), 'e')
   assert.equal(pickVoice(voices, 'female', 'young', 2), 'd')
   assert.equal(pickVoice({}, 'female', 'young', 0), undefined)
+})
+
+test('notebook: initial facts of the met, points for told facts, goal facts complete the quest', async () => {
+  const { call, login, opened, close } = await start()
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', {}, me)).body.game
+  assert.deepEqual(game.notebook, [{ id: 'eleni', name: 'Ελένη', nameRu: 'Элени', facts: [{ id: 'f1', text: 'на вид лет двадцать', points: 0, goal: false }], hidden: 1 }])
+  assert.equal(game.score, 0)
+
+  const facts = (speaker: string, factIds: string[]) => call('POST', `/api/city/games/${game.id}/facts`, { characterId: speaker, factIds }, me)
+  assert.equal((await facts('eleni', ['f2'])).status, 409)
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  assert.match(opened[0], /f4 \(about Γιάννης\): учился в Афинах/)
+  assert.match(opened[0], /call the tool reveal_fact/)
+  const told = (await facts('eleni', ['f2', 'f4', 'f5', 'f1', 'nope'])).body.game
+  assert.equal(told.score, 22)
+  assert.equal(told.total, 22)
+  assert.deepEqual(told.notebook.map((p: { id: string }) => p.id), ['eleni', 'yiannis'])
+  assert.deepEqual(told.notebook[1], { id: 'yiannis', name: 'Γιάννης', nameRu: 'Яннис', facts: [{ id: 'f4', text: 'учился в Афинах', points: 12, goal: false }], hidden: 2 })
+
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'yiannis', from: 'kostas' }, me)
+  const afterLines = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'agent', text: 'Πέντε κιλά σαρδέλες.' }] }, me)).body.game
+  assert.equal(afterLines.score, 47)
+  assert.equal(afterLines.status, 'active')
+  const won = (await facts('yiannis', ['f6'])).body.game
+  assert.equal(won.status, 'won')
+  assert.equal(won.score, 72)
+  assert.deepEqual((await call('GET', '/api/city', undefined, me)).body.total, 72)
+  await close()
+})
+
+test('scenario validation cleans facts', () => {
+  const s = validateScenario(scenario())
+  assert.deepEqual(s.facts.map((f) => f.id), ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'])
+  assert.deepEqual(s.facts.find((f) => f.id === 'f4')!.known_by, ['yiannis', 'eleni'])
 })

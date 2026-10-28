@@ -550,6 +550,42 @@
 .city-people .secondary-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px; }
 .city-people-role { font-size: 12px; color: var(--muted); font-weight: 400; }
 
+.city-layout { display: flex; flex-direction: column; gap: 16px; }
+.city-layout > .city { flex: 1; }
+.notebook {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.notebook-head { display: flex; justify-content: space-between; align-items: baseline; }
+.notebook-title { font-weight: 700; font-size: 16px; }
+.notebook-score { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.notebook-person { display: flex; flex-direction: column; gap: 6px; }
+.notebook-name { font-weight: 600; font-size: 17px; }
+.notebook-name-ru { font-weight: 400; font-size: 13px; color: var(--muted); }
+.notebook-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.notebook-fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.35;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.6s;
+}
+.notebook-fact::before { content: '•'; color: var(--muted); margin-right: -4px; }
+.notebook-fact-text { flex: 1; }
+.notebook-fact-fresh { background: color-mix(in srgb, var(--ok) 22%, transparent); animation: pulse 0.45s ease; }
+.notebook-points { font-weight: 700; color: var(--ok); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.notebook-hidden { font-size: 13px; color: var(--muted); padding-left: 8px; }
+
 /* spell section */
 .spell {
   display: flex;
@@ -773,6 +809,8 @@
 
   .screen > *, .hub-body > *, .aorist > * { width: 100%; max-width: 760px; margin-inline: auto; }
   .screen > .grammar-hub { max-width: 1040px; }
+  .screen > .city-layout { max-width: 1100px; flex-direction: row; align-items: flex-start; }
+  .city-layout > .notebook { width: 340px; flex-shrink: 0; position: sticky; top: 8px; max-height: calc(100vh - 140px); overflow-y: auto; }
   .grammar-hub > .sub-picker { align-self: flex-start; }
   .hub-body > .aorist, .aorist > .aorist-verbs, .hub-body > .lesson-list { max-width: none; }
   .aorist > .aorist-groups { justify-content: center; }

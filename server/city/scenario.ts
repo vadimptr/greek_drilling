@@ -21,12 +21,24 @@ export interface Character {
   greeting_el: string
 }
 
+export interface Fact {
+  id: string
+  about: string
+  text_ru: string
+  text_en: string
+  points: number
+  initial: boolean
+  goal: boolean
+  known_by: string[]
+}
+
 export interface Scenario {
   goal_ru: string
   goal_check: string
   start_id: string
   solver_id: string
   characters: Character[]
+  facts: Fact[]
 }
 
 export interface CharacterCard {
@@ -55,7 +67,7 @@ Everybody knows everybody, people are curious about tourists, talkative and help
 export const SCENARIO_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['goal_ru', 'goal_check', 'start_id', 'solver_id', 'characters'],
+  required: ['goal_ru', 'goal_check', 'start_id', 'solver_id', 'characters', 'facts'],
   properties: {
     goal_ru: { type: 'string' },
     goal_check: { type: 'string' },
@@ -83,6 +95,24 @@ export const SCENARIO_SCHEMA = {
           knows: { type: 'string' },
           refers_to: { type: 'array', items: { type: 'string' } },
           greeting_el: { type: 'string' },
+        },
+      },
+    },
+    facts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'about', 'text_ru', 'text_en', 'points', 'initial', 'goal', 'known_by'],
+        properties: {
+          id: { type: 'string' },
+          about: { type: 'string' },
+          text_ru: { type: 'string' },
+          text_en: { type: 'string' },
+          points: { type: 'integer' },
+          initial: { type: 'boolean' },
+          goal: { type: 'boolean' },
+          known_by: { type: 'array', items: { type: 'string' } },
         },
       },
     },
@@ -119,7 +149,16 @@ Rules:
 - refers_to: ids of the characters this one can send the player to.
 - personality: in English, 1-2 sentences, a distinct manner of speaking.
 - place_el / place_ru: where the character is right now, in Greek and in Russian.
-- greeting_el: the first line this character says when the tourist approaches, natural Greek at level ${level}, 1 short sentence.${recent}`
+- greeting_el: the first line this character says when the tourist approaches, natural Greek at level ${level}, 1 short sentence.
+
+Facts (the player collects them for points while talking):
+- facts: 5 to 8 facts about EACH character. ids "f1", "f2", ... unique. about = the id of the character the fact is about.
+- For each character exactly 1-2 facts with initial=true: what the tourist can see at first glance — approximate age ("на вид лет шестьдесят") and occupation only if it is obvious from the place or clothes ("продаёт рыбу на рынке"). initial facts have points 0.
+- The other facts are discovered in conversation: family, where they studied or worked, their past, hobbies, habits, opinions, small town gossip, and the concrete details of the quest. Short, concrete, interesting.
+- goal=true for the facts the player must find out to complete the quest (prices, times, items, address...). They are consistent with goal_check and knows. 20-30 points each. Other facts 5-15 points, rarer or more personal ones are worth more.
+- known_by: ids of the characters who can tell this fact. The character the fact is about knows it automatically; add others when they would plausibly know it (a niece knows her uncle studied in Athens). Spread clues: other characters should know some facts about the solver.
+- text_ru: the fact as it will appear in the player's notebook, in Russian, 2-8 words, without the person's name ("учился в университете Салоник", "лодка выходит в 6:00"). text_en: the same fact in English, with full detail, for the actor.
+- Facts must not contradict knows, personality or each other.${recent}`
 }
 
 export function validateScenario(raw: unknown): Scenario {
@@ -138,7 +177,23 @@ export function validateScenario(raw: unknown): Scenario {
     frontier.forEach((id) => reached.add(id))
   }
   if (!reached.has(s.solver_id)) throw new Error('scenario: solver is unreachable')
+  const factIds = new Set<string>()
+  s.facts = (Array.isArray(s.facts) ? s.facts : []).filter((f) => {
+    if (!f || !ids.has(f.about) || factIds.has(f.id)) return false
+    factIds.add(f.id)
+    f.known_by = [...new Set([f.about, ...f.known_by.filter((id) => ids.has(id))])]
+    f.points = f.initial ? 0 : Math.max(1, Math.min(50, Math.round(f.points)))
+    return true
+  })
   return s
+}
+
+export function factsOf(s: Scenario): Fact[] {
+  return s.facts ?? []
+}
+
+export function tellableBy(s: Scenario, characterId: string): Fact[] {
+  return factsOf(s).filter((f) => !f.initial && f.known_by.includes(characterId))
 }
 
 export function card(c: Character): CharacterCard {
@@ -156,6 +211,9 @@ export function buildPersona(s: Scenario, characterId: string, level: Level, met
     return `- id "${o.id}": ${o.name_el} (${o.role_ru}), now at ${o.place_el}`
   })
   const metNames = met.filter((id) => id !== c.id).map((id) => byId(id).name_el)
+  const tellable = tellableBy(s, c.id).map(
+    (f) => `- ${f.id} (${f.about === c.id ? 'about you' : `about ${byId(f.about).name_el}`}): ${f.text_en}`,
+  )
   const solverPart =
     c.id === s.solver_id
       ? `The tourist is trying to do this: ${s.goal_check}
@@ -184,6 +242,11 @@ Language rules (most important):
 - If the tourist makes a mistake, do not lecture; just answer naturally, using the correct form yourself.
 
 What you know: ${c.knows}
+
+Facts you can share with the tourist:
+${tellable.length ? tellable.join('\n') : '- none in particular'}
+Share these facts only when the conversation naturally leads there or the tourist asks, one at a time, never as a list.
+Right after you have told the tourist one of them (or confirmed it when they guess it), call the tool reveal_fact with its id, silently.
 
 People you can send the tourist to:
 ${contacts.length ? contacts.join('\n') : '- nobody in particular'}

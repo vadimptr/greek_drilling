@@ -8,8 +8,26 @@ export interface CharacterCard {
   place: string
 }
 
+export interface NoteFact {
+  id: string
+  text: string
+  points: number
+  goal: boolean
+}
+
+export interface NotePerson {
+  id: string
+  name: string
+  nameRu: string
+  facts: NoteFact[]
+  hidden: number
+}
+
 export interface CityGame {
   id: string
+  notebook: NotePerson[]
+  score: number
+  total: number
   city: string
   goal: string
   status: 'active' | 'won'
@@ -60,11 +78,11 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T
 }
 
-export async function cityAccess(): Promise<{ allowed: boolean; city: string }> {
+export async function cityAccess(): Promise<{ allowed: boolean; total: number }> {
   try {
     return await call('GET', '/api/city')
   } catch {
-    return { allowed: false, city: '' }
+    return { allowed: false, total: 0 }
   }
 }
 
@@ -73,6 +91,8 @@ export const newGame = (level: Level) => call<{ game: CityGame }>('POST', '/api/
 export const talk = (gameId: string, characterId: string, from: string | null) =>
   call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from })
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
-  call<void>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines })
+  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines }).then((r) => r.game)
+export const revealFacts = (gameId: string, characterId: string, factIds: string[]) =>
+  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/facts`, { characterId, factIds }).then((r) => r.game)
 export const completeGame = (gameId: string, characterId: string) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/complete`, { characterId }).then((r) => r.game)

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { ProviderError, type ScenarioGenerator } from './providers.ts'
+import { ProviderError, type FactMatcher, type ScenarioGenerator } from './providers.ts'
 import { SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario } from './scenario.ts'
 
 const MODEL = 'claude-opus-5-5'
@@ -35,6 +35,48 @@ export function claudeScenarios(apiKey: string): ScenarioGenerator {
         }
       }
       throw new ProviderError(`scenario generation failed: ${last instanceof Error ? last.message : String(last)}`)
+    },
+  }
+}
+
+const MATCH_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['fact_ids'],
+  properties: { fact_ids: { type: 'array', items: { type: 'string' } } },
+} as const
+
+export function claudeFacts(apiKey: string): FactMatcher {
+  const client = new Anthropic({ apiKey, timeout: 60_000 })
+  return {
+    async match(speaker, lines, facts) {
+      const transcript = lines.map((l) => `${l.role === 'agent' ? speaker : 'Tourist'}: ${l.text}`).join('\n')
+      const list = facts.map((f) => `- ${f.id}: ${f.text}`).join('\n')
+      const response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 4000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: MATCH_SCHEMA } },
+        messages: [
+          {
+            role: 'user',
+            content: `Here is a spoken conversation in Greek between a tourist and ${speaker} (speech recognition may contain small errors).
+
+${transcript}
+
+Facts:
+${list}
+
+Which of these facts did ${speaker} actually communicate to the tourist in this conversation (said it, or clearly confirmed the tourist's guess)? A fact counts only if its key content was really said. Return their ids; return an empty list if none.`,
+          },
+        ],
+      })
+      if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to match facts')
+      const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
+      const parsed = JSON.parse(text) as { fact_ids?: unknown }
+      const known = new Set(facts.map((f) => f.id))
+      return Array.isArray(parsed.fact_ids) ? parsed.fact_ids.filter((id): id is string => typeof id === 'string' && known.has(id)) : []
     },
   }
 }
