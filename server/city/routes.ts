@@ -5,10 +5,10 @@ import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
-import { ProviderError, type FactMatcher, type LevelChecker, type TouristNotes, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
-  abandonActive, addFound, addHeard, addLevelCheck, addLines, addTouristNotes, lastTouristNotes, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
 } from './store.ts'
 
@@ -19,7 +19,6 @@ export interface CityDeps {
   facts: FactMatcher | null
   translator: Translator | null
   levels?: LevelChecker | null
-  tourist?: TouristNotes | null
   voice: VoiceProvider | null
   scenes: SceneStore | null
   ambience?: AmbienceStore | null
@@ -319,7 +318,6 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         mood: game.moods[characterId] ?? 'friendly',
         previous: linesFor(db, game, characterId, 16),
         levelNotes: recentLevelNotes(db, game, 6),
-        aboutTourist: game.tourist.length ? game.tourist : lastTouristNotes(db, u.id, game.id),
       })
       if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
@@ -366,14 +364,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
                 return null
               })
           : Promise.resolve(null)
-      const noting =
-        deps.tourist && lines.some((l) => l.role === 'user')
-          ? deps.tourist
-              .extract(lines, game.tourist)
-              .then((notes) => addTouristNotes(db, game, notes))
-              .catch((e) => console.error(e))
-          : Promise.resolve()
-      const [, check] = await Promise.all([matching, checking, noting])
+      const [, check] = await Promise.all([matching, checking])
       send(res, 200, { game: view(game), check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) } })
       return true
     }

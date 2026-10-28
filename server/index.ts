@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { createApp } from './app.ts'
-import { claudeFacts, claudeLevels, claudeScenarios, claudeTouristNotes, claudeTranslator } from './city/claude.ts'
+import { claudeFacts, claudeLevels, claudeScenarios, claudeTranslator } from './city/claude.ts'
 import { dropModeratedVoices, elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
 import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
@@ -34,7 +34,6 @@ const city = {
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,
   translator: env.ANTHROPIC_API_KEY ? claudeTranslator(env.ANTHROPIC_API_KEY) : null,
   levels: env.ANTHROPIC_API_KEY ? claudeLevels(env.ANTHROPIC_API_KEY) : null,
-  tourist: env.ANTHROPIC_API_KEY ? claudeTouristNotes(env.ANTHROPIC_API_KEY) : null,
   voice: voiceConfig ? elevenLabsVoice(voiceConfig) : null,
 }
 

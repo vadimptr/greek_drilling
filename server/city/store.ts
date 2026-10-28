@@ -14,7 +14,6 @@ export interface Game {
   heard: string[]
   moods: Record<string, Mood>
   reasons: Record<string, string>
-  tourist: string[]
   status: GameStatus
 }
 
@@ -28,7 +27,6 @@ interface GameRow {
   heard: string
   moods: string
   reasons: string
-  tourist: string
   status: GameStatus
 }
 
@@ -75,7 +73,6 @@ export function migrateCity(db: DatabaseSync): void {
   const cols = db.prepare('PRAGMA table_info(city_games)').all() as { name: string }[]
   if (!cols.some((c) => c.name === 'found')) db.exec("ALTER TABLE city_games ADD COLUMN found TEXT NOT NULL DEFAULT '[]'")
   if (!cols.some((c) => c.name === 'heard')) db.exec("ALTER TABLE city_games ADD COLUMN heard TEXT NOT NULL DEFAULT '[]'")
-  if (!cols.some((c) => c.name === 'tourist')) db.exec("ALTER TABLE city_games ADD COLUMN tourist TEXT NOT NULL DEFAULT '[]'")
   if (!cols.some((c) => c.name === 'reasons')) db.exec("ALTER TABLE city_games ADD COLUMN reasons TEXT NOT NULL DEFAULT '{}'")
   if (!cols.some((c) => c.name === 'moods')) db.exec("ALTER TABLE city_games ADD COLUMN moods TEXT NOT NULL DEFAULT '{}'")
 }
@@ -90,7 +87,6 @@ const toGame = (r: GameRow): Game => ({
   heard: JSON.parse(r.heard),
   moods: JSON.parse(r.moods),
   reasons: JSON.parse(r.reasons),
-  tourist: JSON.parse(r.tourist),
   status: r.status,
 })
 
@@ -102,7 +98,7 @@ export function createGame(db: DatabaseSync, userId: number, level: Level, scena
   db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, userId, level, JSON.stringify(scenario), t, t,
   )
-  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, reasons: {}, tourist: [], status: 'active' }
+  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, reasons: {}, status: 'active' }
 }
 
 export function findGame(db: DatabaseSync, userId: number, id: string): Game | undefined {
@@ -215,18 +211,4 @@ export function recentLevelNotes(db: DatabaseSync, game: Game, limit: number): s
   const rows = db.prepare('SELECT issues FROM city_level_checks WHERE game_id = ? ORDER BY id DESC LIMIT 3').all(game.id) as { issues: string }[]
   const notes = rows.flatMap((r) => (JSON.parse(r.issues) as LevelCheck['issues']).map((i) => i.note))
   return [...new Set(notes)].slice(0, limit)
-}
-
-export function addTouristNotes(db: DatabaseSync, game: Game, notes: string[]): void {
-  const added = notes.filter((n) => !game.tourist.includes(n))
-  if (!added.length) return
-  game.tourist = [...game.tourist, ...added].slice(-20)
-  db.prepare('UPDATE city_games SET tourist = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.tourist), now(), game.id)
-}
-
-export function lastTouristNotes(db: DatabaseSync, userId: number, exceptGame: string): string[] {
-  const row = db
-    .prepare("SELECT tourist FROM city_games WHERE user_id = ? AND id != ? AND tourist != '[]' ORDER BY updated_at DESC LIMIT 1")
-    .get(userId, exceptGame) as { tourist: string } | undefined
-  return row ? JSON.parse(row.tourist) : []
 }
