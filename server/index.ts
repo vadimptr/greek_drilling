@@ -31,7 +31,7 @@ const city = {
   allowedUsers: parseAllowed(env.CITY_ALLOWED_USERS),
   dailyTalks: Number(env.CITY_DAILY_TALKS ?? 40),
   dailyStories: Number(env.CITY_DAILY_STORIES ?? 15),
-  poolSize: Number(env.CITY_POOL_SIZE ?? 1),
+  poolSize: Number(env.CITY_POOL_SIZE ?? 10),
   poolIntervalMs: 5 * 60_000,
   scenarios: env.ANTHROPIC_API_KEY ? claudeScenarios(env.ANTHROPIC_API_KEY) : null,
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,

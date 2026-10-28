@@ -7,9 +7,9 @@ import { issue, readCookie, verify } from '../session.ts'
 import { timingSafeEqual } from 'node:crypto'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
-import { createPool, hourOffset, takeFromPool, touchDemand } from './pool.ts'
+import { createPool, randomTime, takeFromPool } from './pool.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
-import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, timeOfDay, type Level, type Mood } from './scenario.ts'
+import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood } from './scenario.ts'
 import {
   abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordStory, recordTalk, storiesSince, talksSince, type Game,
@@ -311,14 +311,11 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
       if (storiesSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= (deps.dailyStories ?? 15)) {
         throw new HttpError(429, 'На сегодня новых историй достаточно, приходи завтра')
       }
-      const hour = typeof body.hour === 'number' && body.hour >= 0 && body.hour < 24 ? Math.floor(body.hour) : null
-      const time = hour === null ? undefined : timeOfDay(hour)
-      if (hour !== null) touchDemand(db, level, hourOffset(hour, new Date().getHours()))
-      const pooled = time ? takeFromPool(db, { level, time }) : null
+      const pooled = takeFromPool(db, level)
       let scenario = pooled?.scenario
       if (!scenario) {
         const startedAt = Date.now()
-        scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), time).catch(providerFailure)
+        scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), randomTime()).catch(providerFailure)
         storyTiming.record(Date.now() - startedAt)
       }
       abandonActive(db, u.id)

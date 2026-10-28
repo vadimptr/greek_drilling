@@ -464,9 +464,9 @@ test('time of day: from the player hour into the story, residents and scene ligh
   const { call, login, opened, close } = await start({ scenarios: { generate: async (_l, _r, time) => { asked = time; const sc = validateScenario(scenario()); sc.time_of_day = time; return sc } } })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', { hour: 22 }, me)).body.game
-  assert.equal(asked, 'night')
+  assert.ok(['morning', 'noon', 'evening', 'night'].includes(String(asked)))
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  assert.match(opened[0], /Time of day: night/)
+  assert.match(opened[0], new RegExp(`Time of day: ${asked}`))
   await close()
 })
 
@@ -515,38 +515,26 @@ test('resuming after a silence pause continues the same talk without counting it
   await close()
 })
 
-test('story pool: demand-driven refill per level and time of day, instant claim with the pre-drawn scene', async () => {
+test('story pool: three level queues kept full in the background, a new task is taken instantly with its first scene', async () => {
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { SceneStore } = await import('./images.ts')
-  const { createPool, hourOffset, poolTargets, poolCount } = await import('./pool.ts')
-  assert.equal(hourOffset(23, 1), -2)
-  assert.equal(hourOffset(1, 23), 2)
-  assert.equal(hourOffset(10, 10), 0)
+  const { createPool, poolCount } = await import('./pool.ts')
+  const times = new Set<string>()
   let generated = 0
-  const scenarios = { generate: async (_l: string, _r: string[], time?: string) => { generated++; const s = validateScenario(scenario()); s.time_of_day = time as never; return s } }
-  const drawn: string[] = []
-  const scenes = new SceneStore(mkdtempSync(`${tmpdir()}/pool-`), { id: 'f', generate: async (p) => { drawn.push(p); return Buffer.from('png') } })
-  const { call, login, close, db } = await startWithDb({ scenarios, scenes, poolSize: 1 })
+  const scenarios = { generate: async (_l: string, _r: string[], time?: string) => { generated++; times.add(String(time)); const s = validateScenario(scenario()); s.time_of_day = time as never; return s } }
+  const scenes = new SceneStore(mkdtempSync(`${tmpdir()}/pool-`), { id: 'f', generate: async () => Buffer.from('png') })
+  const { call, login, close, db } = await startWithDb({ scenarios, scenes, poolSize: 3 })
+  await createPool(db, { scenarios, scenes, size: 3 }).refill()
+  assert.deepEqual(['A1', 'A2', 'B1'].map((l) => poolCount(db, l as never)), [3, 3, 3])
+  assert.equal(generated, 9)
+  assert.ok([...times].every((t) => ['morning', 'noon', 'evening', 'night'].includes(t)))
   const me = await login('Vadim')
-  const hour = new Date().getHours()
-  const first = await call('POST', '/api/city/games', { level: 'A1', hour }, me)
-  assert.equal(first.status, 201)
+  const game = (await call('POST', '/api/city/games', { level: 'A2' }, me)).body.game
+  assert.equal(game.characters.find((c: { id: string }) => c.id === 'eleni').scene, `/api/city/games/${game.id}/scenes/eleni`)
   await new Promise((r) => setTimeout(r, 80))
-  const targets = poolTargets(db, new Date())
-  assert.ok(targets.some((t) => t.level === 'A1'))
-  for (const t of targets) assert.equal(poolCount(db, t), 1)
-  const before = generated
-  const second = await call('POST', '/api/city/games', { level: 'A1', hour }, me)
-  assert.equal(second.status, 201)
-  assert.equal(second.body.game.characters.find((c: { id: string }) => c.id === 'eleni').scene, `/api/city/games/${second.body.game.id}/scenes/eleni`)
-  assert.ok(generated <= before + targets.length)
-  await new Promise((r) => setTimeout(r, 80))
-  for (const t of poolTargets(db, new Date())) assert.equal(poolCount(db, t), 1)
-  const idle = createPool(db, { scenarios, scenes: null, size: 0 })
-  const g0 = generated
-  await idle.refill()
-  assert.equal(generated, g0)
+  assert.equal(poolCount(db, 'A2'), 3)
+  assert.equal(generated, 10)
   await close()
 })
 
