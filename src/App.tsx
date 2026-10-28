@@ -79,6 +79,7 @@ export default function App() {
       words: initialWords(a.words.direction, a.words.autoSpeak, a.words.level),
       speakHint: a.speakHint,
       grammarSub: a.grammarSub,
+      citySpeed: a.citySpeed,
     }))
     setSettingsOpen(false)
   }
@@ -181,7 +182,7 @@ export default function App() {
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'city' && (
-          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
+          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} speed={app.citySpeed} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
         )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
@@ -203,6 +204,8 @@ export default function App() {
         level={app.words.level}
         canSpeak={speechAvailable}
         speakHint={app.speakHint}
+        citySpeed={app.citySpeed}
+        onCitySpeed={(citySpeed) => setApp((a) => ({ ...a, citySpeed }))}
         onDirection={changeDirection}
         onAutoSpeak={changeAutoSpeak}
         onLevel={changeLevel}

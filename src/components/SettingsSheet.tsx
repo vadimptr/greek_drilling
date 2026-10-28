@@ -1,6 +1,7 @@
 import { lessonsUpTo } from '../data/grammar'
 import { wordPool } from '../data/levels'
-import type { SpeakHint } from '../logic/appState'
+import { CITY_SPEEDS, type SpeakHint } from '../logic/appState'
+import { CITY_NAME } from '../logic/city/name'
 import { LEVELS, type Direction, type Level } from '../types/word'
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
   level: Level
   canSpeak: boolean
   speakHint: SpeakHint
+  citySpeed: number
+  onCitySpeed: (v: number) => void
   onDirection: (d: Direction) => void
   onAutoSpeak: (v: boolean) => void
   onLevel: (l: Level) => void
@@ -25,6 +28,8 @@ export function SettingsSheet({
   level,
   canSpeak,
   speakHint,
+  citySpeed,
+  onCitySpeed,
   onDirection,
   onAutoSpeak,
   onLevel,
@@ -84,6 +89,26 @@ export function SettingsSheet({
           <button className={speakHint === 'ru' ? 'seg seg-active' : 'seg'} onClick={() => onSpeakHint('ru')}>
             Только перевод
           </button>
+        </div>
+
+        <div className="sheet-label">{CITY_NAME}: скорость речи жителей — {citySpeed.toFixed(1)}×</div>
+        <div className="level-slider">
+          <input
+            type="range"
+            min={0}
+            max={CITY_SPEEDS.length - 1}
+            step={1}
+            value={Math.max(0, CITY_SPEEDS.indexOf(citySpeed))}
+            onChange={(e) => onCitySpeed(CITY_SPEEDS[Number(e.target.value)])}
+            aria-label="Скорость речи жителей"
+          />
+          <div className="level-ticks">
+            {CITY_SPEEDS.map((v) => (
+              <button key={v} className={v === citySpeed ? 'level-tick level-tick-active' : 'level-tick'} onClick={() => onCitySpeed(v)}>
+                {v.toFixed(1)}
+              </button>
+            ))}
+          </div>
         </div>
 
         <label className="toggle-row">

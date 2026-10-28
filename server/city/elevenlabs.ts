@@ -45,7 +45,7 @@ export function elevenLabsVoice(cfg: ElevenLabsConfig, fetchImpl: typeof fetch =
           conversationToken: token,
           overrides: {
             agent: { prompt: { prompt: persona.systemPrompt }, firstMessage: persona.firstMessage, language: persona.language },
-            tts: { ...(voiceId ? { voiceId } : {}), speed: cfg.speed },
+            tts: { ...(voiceId ? { voiceId } : {}), speed: persona.speed ?? cfg.speed },
             asr: { keywords: persona.keywords },
           },
         },

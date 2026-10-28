@@ -97,8 +97,8 @@ export async function cityAccess(): Promise<{ allowed: boolean; total: number }>
 
 export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/city/games/current').then((r) => r.game)
 export const newGame = (level: Level) => call<{ game: CityGame }>('POST', '/api/city/games', { level }).then((r) => r.game)
-export const talk = (gameId: string, characterId: string, from: string | null) =>
-  call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from })
+export const talk = (gameId: string, characterId: string, from: string | null, speed: number) =>
+  call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed })
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines }).then((r) => r.game)
 export const setMood = (gameId: string, characterId: string, mood: string, reason: string) =>

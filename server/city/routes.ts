@@ -204,6 +204,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         mood: game.moods[characterId] ?? 'friendly',
         previous: linesFor(db, game, characterId, 16),
       })
+      if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
       recordTalk(db, game, characterId, deps.voice.id)
       markMet(db, game, characterId)

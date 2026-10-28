@@ -60,6 +60,7 @@ export interface Persona {
   firstMessage: string
   language: 'el'
   keywords: string[]
+  speed?: number
   voice: { gender: Gender; age: Age; index: number }
 }
 

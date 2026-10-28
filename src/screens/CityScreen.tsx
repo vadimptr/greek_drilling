@@ -15,6 +15,7 @@ interface Props {
   allowed: boolean | null
   signedIn: boolean
   level: Level
+  speed: number
   onSignIn: () => void
   onTotal: (total: number) => void
 }
@@ -39,7 +40,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -49,6 +50,8 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
   const [subs, setSubs] = useState(readSubs)
   const subsRef = useRef(subs)
   subsRef.current = subs
+  const speedRef = useRef(speed)
+  speedRef.current = speed
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const freshTimer = useRef<number | undefined>(undefined)
 
@@ -220,7 +223,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
     setPhase('connecting')
     const seq = ++callSeq.current
     try {
-      const t = await talk(g.id, characterId, from)
+      const t = await talk(g.id, characterId, from, speedRef.current)
       if (seq !== callSeq.current) return
       applyGame(t.game)
       currentRef.current = characterId

@@ -31,7 +31,11 @@ export interface AppState {
   /** Прогресс раздела «Аорист» (ключи — id глаголов из data/aorist). */
   aorist: SpeakState
   grammarSub: GrammarSub
+  citySpeed: number
 }
+
+export const CITY_SPEEDS = [0.7, 0.8, 0.9, 1, 1.1, 1.2]
+export const DEFAULT_CITY_SPEED = 0.9
 
 export const APP_STORAGE_KEY = 'greek_drilling.v3'
 /** Предыдущий ключ: формат совместим, читается как есть, если v3 ещё не сохранялся. */
@@ -52,6 +56,7 @@ export function initialAppState(): AppState {
     nouns: initialSpeakState(),
     aorist: initialSpeakState(),
     grammarSub: 'lessons',
+    citySpeed: DEFAULT_CITY_SPEED,
   }
 }
 
@@ -143,6 +148,7 @@ export function deserializeApp(
     nouns: parseProgress(parsed.nouns, words),
     aorist: parseProgress(parsed.aorist, AORIST_WORDS),
     grammarSub: parsed.grammarSub === 'nouns' || parsed.grammarSub === 'aorist' ? parsed.grammarSub : 'lessons',
+    citySpeed: CITY_SPEEDS.find((v) => v === parsed.citySpeed) ?? DEFAULT_CITY_SPEED,
   }
 }
 

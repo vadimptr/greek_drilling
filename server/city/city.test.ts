@@ -170,6 +170,8 @@ test('elevenlabs session carries token, persona overrides and the matching voice
   const conn = s.connection as { conversationToken: string; overrides: { tts: { voiceId?: string; speed: number } } }
   assert.equal(conn.conversationToken, 'tok')
   assert.deepEqual(conn.overrides.tts, { voiceId: 'v2', speed: 0.9 })
+  const slow = await provider.open({ ...persona, speed: 0.75 })
+  assert.equal((slow.connection as typeof conn).overrides.tts.speed, 0.75)
 })
 
 test('voices rotate within a slot and fall back to the nearest age', () => {
