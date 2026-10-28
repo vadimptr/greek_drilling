@@ -13,6 +13,7 @@ export interface Game {
   found: string[]
   heard: string[]
   moods: Record<string, Mood>
+  reasons: Record<string, string>
   status: GameStatus
 }
 
@@ -25,6 +26,7 @@ interface GameRow {
   found: string
   heard: string
   moods: string
+  reasons: string
   status: GameStatus
 }
 
@@ -62,6 +64,7 @@ export function migrateCity(db: DatabaseSync): void {
   const cols = db.prepare('PRAGMA table_info(city_games)').all() as { name: string }[]
   if (!cols.some((c) => c.name === 'found')) db.exec("ALTER TABLE city_games ADD COLUMN found TEXT NOT NULL DEFAULT '[]'")
   if (!cols.some((c) => c.name === 'heard')) db.exec("ALTER TABLE city_games ADD COLUMN heard TEXT NOT NULL DEFAULT '[]'")
+  if (!cols.some((c) => c.name === 'reasons')) db.exec("ALTER TABLE city_games ADD COLUMN reasons TEXT NOT NULL DEFAULT '{}'")
   if (!cols.some((c) => c.name === 'moods')) db.exec("ALTER TABLE city_games ADD COLUMN moods TEXT NOT NULL DEFAULT '{}'")
 }
 
@@ -74,6 +77,7 @@ const toGame = (r: GameRow): Game => ({
   found: JSON.parse(r.found),
   heard: JSON.parse(r.heard),
   moods: JSON.parse(r.moods),
+  reasons: JSON.parse(r.reasons),
   status: r.status,
 })
 
@@ -85,7 +89,7 @@ export function createGame(db: DatabaseSync, userId: number, level: Level, scena
   db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, userId, level, JSON.stringify(scenario), t, t,
   )
-  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, status: 'active' }
+  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, reasons: {}, status: 'active' }
 }
 
 export function findGame(db: DatabaseSync, userId: number, id: string): Game | undefined {
@@ -159,9 +163,12 @@ export function addHeard(db: DatabaseSync, game: Game, ids: string[]): void {
   db.prepare('UPDATE city_games SET heard = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.heard), now(), game.id)
 }
 
-export function setMood(db: DatabaseSync, game: Game, characterId: string, mood: Mood): void {
+export function setMood(db: DatabaseSync, game: Game, characterId: string, mood: Mood, reason: string): void {
   game.moods[characterId] = mood
-  db.prepare('UPDATE city_games SET moods = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.moods), now(), game.id)
+  game.reasons[characterId] = reason
+  db.prepare('UPDATE city_games SET moods = ?, reasons = ?, updated_at = ? WHERE id = ?').run(
+    JSON.stringify(game.moods), JSON.stringify(game.reasons), now(), game.id,
+  )
 }
 
 export function linesFor(db: DatabaseSync, game: Game, characterId: string, limit: number): { role: string; text: string }[] {

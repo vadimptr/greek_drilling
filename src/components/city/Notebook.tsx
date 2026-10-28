@@ -1,4 +1,5 @@
 import type { Mood, NotePerson } from '../../logic/city/api'
+import { Tip } from './Tip'
 
 interface Props {
   people: NotePerson[]
@@ -22,6 +23,12 @@ export function attitude(p: NotePerson): string {
   return `${a.icon} ${a[p.gender]}`
 }
 
+export function reasonOf(p: NotePerson): string {
+  if (!p.met) return 'Вы ещё не разговаривали'
+  if (p.moodReason) return p.moodReason
+  return p.mood === 'friendly' ? 'Ты ничем не задел — обычное отношение' : 'Причина не названа'
+}
+
 export function Notebook({ people, score, fresh, current, canPick, onPick }: Props) {
   return (
     <aside className="notebook" aria-label="Блокнот">
@@ -41,9 +48,9 @@ export function Notebook({ people, score, fresh, current, canPick, onPick }: Pro
               {p.id === current && '🗣️ '}
               {p.name} <span className="notebook-name-ru">{p.nameRu}</span>
             </span>
-            <span className={`notebook-mood notebook-mood-${p.met ? p.mood : 'stranger'}`}>
+            <Tip text={reasonOf(p)} align="right" className={`notebook-mood notebook-mood-${p.met ? p.mood : 'stranger'}`}>
               {attitude(p)}
-            </span>
+            </Tip>
           </button>
           <ul className="notebook-facts">
             {p.facts.map((f) => (

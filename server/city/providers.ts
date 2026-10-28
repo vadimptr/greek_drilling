@@ -8,6 +8,10 @@ export interface FactMatcher {
   match(speaker: string, lines: { role: string; text: string }[], facts: { id: string; text: string }[]): Promise<string[]>
 }
 
+export interface Translator {
+  toRussian(greek: string): Promise<string>
+}
+
 export interface VoiceSession {
   provider: string
   connection: Record<string, unknown>

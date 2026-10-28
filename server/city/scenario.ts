@@ -13,6 +13,7 @@ export interface Character {
   name_el: string
   name_ru: string
   role_ru: string
+  role_el?: string
   gender: Gender
   age: Age
   place_el: string
@@ -36,6 +37,7 @@ export interface Fact {
 
 export interface Scenario {
   goal_ru: string
+  goal_el?: string
   goal_check: string
   start_id: string
   solver_id: string
@@ -48,7 +50,9 @@ export interface CharacterCard {
   name: string
   nameRu: string
   role: string
+  roleRu: string
   place: string
+  placeRu: string
 }
 
 export interface Persona {
@@ -69,9 +73,10 @@ Everybody knows everybody, people are curious about tourists, talkative and help
 export const SCENARIO_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['goal_ru', 'goal_check', 'start_id', 'solver_id', 'characters', 'facts'],
+  required: ['goal_ru', 'goal_el', 'goal_check', 'start_id', 'solver_id', 'characters', 'facts'],
   properties: {
     goal_ru: { type: 'string' },
+    goal_el: { type: 'string' },
     goal_check: { type: 'string' },
     start_id: { type: 'string' },
     solver_id: { type: 'string' },
@@ -81,7 +86,7 @@ export const SCENARIO_SCHEMA = {
         type: 'object',
         additionalProperties: false,
         required: [
-          'id', 'name_el', 'name_ru', 'role_ru', 'gender', 'age', 'place_el', 'place_ru',
+          'id', 'name_el', 'name_ru', 'role_ru', 'role_el', 'gender', 'age', 'place_el', 'place_ru',
           'personality', 'knows', 'refers_to', 'greeting_el',
         ],
         properties: {
@@ -89,6 +94,7 @@ export const SCENARIO_SCHEMA = {
           name_el: { type: 'string' },
           name_ru: { type: 'string' },
           role_ru: { type: 'string' },
+          role_el: { type: 'string' },
           gender: { type: 'string', enum: ['male', 'female'] },
           age: { type: 'string', enum: ['young', 'middle', 'old'] },
           place_el: { type: 'string' },
@@ -142,6 +148,7 @@ Invent a new one in this spirit, with concrete details the player has to find ou
 
 Rules:
 - goal_ru: the task for the player in Russian, 1-2 sentences, imperative ("Узнай…", "Купи…"). Name the person by role or name but do not explain where to find them.
+- goal_el: the same task in Greek, at level ${level}, short and clear ("Μάθε…", "Αγόρασε…").
 - goal_check: in English, what exactly the player must have obtained or found out for the goal to count as done (concrete facts, numbers, items).
 - 3 to 5 characters. Greek names. ids are short lowercase latin slugs (e.g. "yiannis").
 - start_id: the character the player meets first. It must NOT be the solver: a passer-by, a relative or a friend of the solver, standing somewhere relevant.
@@ -150,6 +157,7 @@ Rules:
 - knows: in English, what this character knows about the goal, the solver and the others, including concrete facts the solver will give (prices, items, recipe, address...). Facts must be consistent between characters.
 - refers_to: ids of the characters this one can send the player to.
 - personality: in English, 1-2 sentences, a distinct manner of speaking.
+- role_ru / role_el: who the character is, in Russian and in Greek ("хозяйка киоска" / "η ιδιοκτήτρια του περιπτέρου"), Greek at level ${level}.
 - place_el / place_ru: where the character is right now, in Greek and in Russian.
 - greeting_el: the first line this character says when the tourist approaches, natural Greek at level ${level}, 1 short sentence.
 
@@ -200,7 +208,7 @@ export function tellableBy(s: Scenario, characterId: string): Fact[] {
 }
 
 export function card(c: Character): CharacterCard {
-  return { id: c.id, name: c.name_el, nameRu: c.name_ru, role: c.role_ru, place: c.place_ru }
+  return { id: c.id, name: c.name_el, nameRu: c.name_ru, role: c.role_el ?? c.role_ru, roleRu: c.role_ru, place: c.place_el, placeRu: c.place_ru }
 }
 
 const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
@@ -296,7 +304,7 @@ Feelings:
 - You are a real person with feelings and dignity. If the tourist is rude, insults you, mocks you, makes vulgar or inappropriate remarks, flirts aggressively, threatens, or keeps talking deliberate nonsense, react like a real person from a small town: get annoyed, offended or angry depending on how bad it is, and show it in your words and tone.
 - While you are offended or angry, don't share facts and don't help; you may answer coldly or ask them to apologise. A sincere apology («συγγνώμη») softens you step by step; you may forgive.
 - Language mistakes, misunderstandings, clumsy phrasing or silence are NOT rudeness: be patient with a learner.
-- Whenever your mood towards the tourist changes, call the tool set_mood with the new mood: friendly, annoyed, offended or angry.
+- Whenever your mood towards the tourist changes, call the tool set_mood with the new mood (friendly, annoyed, offended or angry) and the reason: in Russian, 3-8 words, addressed to the tourist («ты посмеялся над моим возрастом», «ты извинился»).
 - If you are angry and the tourist keeps being rude, say one short final line and call the tool walk_away.`
 
   const keywords = [CITY_NAME, ...s.characters.map((x) => x.name_el), c.place_el].slice(0, 50)

@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
-import { ProviderError, type FactMatcher, type ScenarioGenerator, type VoiceProvider } from './providers.ts'
+import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
   abandonActive, addFound, addHeard, addLines, allGames, linesFor, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
@@ -15,12 +15,15 @@ export interface CityDeps {
   dailyTalks: number
   scenarios: ScenarioGenerator | null
   facts: FactMatcher | null
+  translator: Translator | null
   voice: VoiceProvider | null
 }
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1']
 const MAX_LINES = 200
 const MAX_LINE = 2000
+const MAX_TRANSLATE = 500
+const CACHE_SIZE = 1000
 
 export function parseAllowed(raw: string | undefined): string[] {
   return (raw ?? '').split(',').map((n) => n.trim()).filter(Boolean)
@@ -72,6 +75,7 @@ function notebook(game: Game) {
       gender: c.gender,
       met: game.met.includes(id),
       mood: game.moods[id] ?? 'friendly',
+      moodReason: game.reasons[id] ?? '',
       facts: visible.map((f) => ({ id: f.id, text: f.text_ru, points: f.points, goal: f.goal })),
       hidden: own.filter((f) => !f.initial && !game.found.includes(f.id)).length,
     }
@@ -86,7 +90,8 @@ function publicGame(game: Game) {
     score: score(game),
     id: game.id,
     city: CITY_NAME,
-    goal: s.goal_ru,
+    goal: s.goal_el ?? s.goal_ru,
+    goalRu: s.goal_ru,
     status: game.status,
     startId: s.start_id,
     met: game.met,
@@ -118,6 +123,16 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
 
   const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|complete)$/
 
+  const translations = new Map<string, string>()
+  const translate = async (text: string): Promise<string> => {
+    const cached = translations.get(text)
+    if (cached !== undefined) return cached
+    const ru = await deps.translator!.toRussian(text)
+    if (translations.size >= CACHE_SIZE) translations.delete(translations.keys().next().value!)
+    translations.set(text, ru)
+    return ru
+  }
+
   const totalScore = (userId: number) => allGames(db, userId).reduce((sum, g) => sum + score(g), 0)
   const view = (game: Game) => ({ ...publicGame(game), total: totalScore(game.userId) })
 
@@ -141,6 +156,16 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       const u = requireAllowed(user)
       const game = currentGame(db, u.id)
       send(res, 200, { game: game ? view(game) : null })
+      return true
+    }
+
+    if (method === 'POST' && path === '/api/city/translate') {
+      requireAllowed(user)
+      if (!deps.translator) throw new HttpError(503, 'Перевод не настроен')
+      const body = await readJson(req)
+      const text = typeof body.text === 'string' ? body.text.trim().slice(0, MAX_TRANSLATE) : ''
+      if (!text) throw new HttpError(400, 'Пустой текст')
+      send(res, 200, { ru: await translate(text).catch(providerFailure) })
       return true
     }
 
@@ -211,7 +236,8 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       if (!game.met.includes(characterId)) throw new HttpError(409, 'С этим жителем ты ещё не говорил')
       const mood = MOODS.find((x) => x === body.mood)
       if (!mood) throw new HttpError(400, 'Неизвестное настроение')
-      setMood(db, game, characterId, mood as Mood)
+      const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 120) : ''
+      setMood(db, game, characterId, mood as Mood, reason)
       send(res, 200, { game: view(game) })
       return true
     }

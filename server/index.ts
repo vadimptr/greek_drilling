@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { createApp } from './app.ts'
-import { claudeFacts, claudeScenarios } from './city/claude.ts'
+import { claudeFacts, claudeScenarios, claudeTranslator } from './city/claude.ts'
 import { elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
 import { openDb } from './db.ts'
@@ -17,6 +17,7 @@ const city = {
   dailyTalks: Number(env.CITY_DAILY_TALKS ?? 40),
   scenarios: env.ANTHROPIC_API_KEY ? claudeScenarios(env.ANTHROPIC_API_KEY) : null,
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,
+  translator: env.ANTHROPIC_API_KEY ? claudeTranslator(env.ANTHROPIC_API_KEY) : null,
   voice:
     env.ELEVENLABS_API_KEY && env.ELEVENLABS_AGENT_ID
       ? elevenLabsVoice({

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { ProviderError, type FactMatcher, type ScenarioGenerator } from './providers.ts'
+import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator } from './providers.ts'
 import { SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario } from './scenario.ts'
 
 const MODEL = 'claude-opus-5-5'
@@ -77,6 +77,25 @@ Which of these facts did ${speaker} actually communicate to the tourist in this 
       const parsed = JSON.parse(text) as { fact_ids?: unknown }
       const known = new Set(facts.map((f) => f.id))
       return Array.isArray(parsed.fact_ids) ? parsed.fact_ids.filter((id): id is string => typeof id === 'string' && known.has(id)) : []
+    },
+  }
+}
+
+export function claudeTranslator(apiKey: string): Translator {
+  const client = new Anthropic({ apiKey, timeout: 30_000 })
+  return {
+    async toRussian(greek) {
+      const response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'low' },
+        system: 'Translate the Greek phrase from a spoken conversation into natural Russian. The phrase may have small speech recognition errors or mixed languages. Reply with the translation only, no quotes or comments.',
+        messages: [{ role: 'user', content: greek }],
+      })
+      if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to translate')
+      return response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim()
     },
   }
 }

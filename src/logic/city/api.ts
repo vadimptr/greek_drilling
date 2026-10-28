@@ -5,7 +5,9 @@ export interface CharacterCard {
   name: string
   nameRu: string
   role: string
+  roleRu: string
   place: string
+  placeRu: string
 }
 
 export interface NoteFact {
@@ -24,6 +26,7 @@ export interface NotePerson {
   gender: 'male' | 'female'
   met: boolean
   mood: Mood
+  moodReason: string
   facts: NoteFact[]
   hidden: number
 }
@@ -35,6 +38,7 @@ export interface CityGame {
   total: number
   city: string
   goal: string
+  goalRu: string
   status: 'active' | 'won'
   startId: string
   met: string[]
@@ -97,9 +101,22 @@ export const talk = (gameId: string, characterId: string, from: string | null) =
   call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from })
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines }).then((r) => r.game)
-export const setMood = (gameId: string, characterId: string, mood: string) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/mood`, { characterId, mood }).then((r) => r.game)
+export const setMood = (gameId: string, characterId: string, mood: string, reason: string) =>
+  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/mood`, { characterId, mood, reason }).then((r) => r.game)
 export const revealFacts = (gameId: string, characterId: string, factIds: string[]) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/facts`, { characterId, factIds }).then((r) => r.game)
 export const completeGame = (gameId: string, characterId: string) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/complete`, { characterId }).then((r) => r.game)
+
+const translations = new Map<string, Promise<string>>()
+
+export function translateCached(text: string): Promise<string> {
+  const key = text.trim()
+  let pending = translations.get(key)
+  if (!pending) {
+    pending = call<{ ru: string }>('POST', '/api/city/translate', { text: key }).then((r) => r.ru)
+    pending.catch(() => translations.delete(key))
+    translations.set(key, pending)
+  }
+  return pending
+}

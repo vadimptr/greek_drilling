@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, revealFacts, saveLines, setMood, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, newGame, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
+import { Tip } from '../components/city/Tip'
+import { Translated } from '../components/city/Translated'
 import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
@@ -45,6 +47,8 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
   const [speaking, setSpeaking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [subs, setSubs] = useState(readSubs)
+  const subsRef = useRef(subs)
+  subsRef.current = subs
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const freshTimer = useRef<number | undefined>(undefined)
 
@@ -156,6 +160,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
     onLine: (role, text) => {
       if (seq !== callSeq.current || !text.trim()) return
       linesRef.current = [...linesRef.current, { role, text }]
+      if (subsRef.current) void translateCached(text).catch(() => undefined)
       setLines(linesRef.current)
     },
     onMode: (mode) => {
@@ -179,7 +184,8 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
       }
       if (name === 'set_mood') {
         const mood = String(params.mood ?? '')
-        if (mood) void setMood(g.id, current, mood).then(applyIfCurrent).catch(() => undefined)
+        const reason = String(params.reason ?? '')
+        if (mood) void setMood(g.id, current, mood, reason).then(applyIfCurrent).catch(() => undefined)
         return 'ok'
       }
       if (name === 'walk_away') {
@@ -291,7 +297,9 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
         {(phase === 'connecting' || phase === 'talking' || (phase === 'idle' && character)) && character && (
           <>
             <div className={speaking ? 'city-name city-name-speaking' : 'city-name'}>{character.name}</div>
-            <div className="speak-ru">{character.role} · {character.place}</div>
+            <Tip text={`${character.roleRu} · ${character.placeRu}`}>
+              <span className="speak-ru">{character.role} · {character.place}</span>
+            </Tip>
           </>
         )}
         {phase === 'idle' && !character && (
@@ -307,9 +315,13 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
         {subs && lines.length > 0 && (
           <div className="city-subs">
             {lines.slice(-4).map((l, i) => (
-              <div key={i} className={l.role === 'user' ? 'city-line city-line-me' : 'city-line'}>
+              <Translated
+                key={Math.max(0, lines.length - 4) + i}
+                text={l.text}
+                className={l.role === 'user' ? 'city-line city-line-me' : 'city-line'}
+              >
                 {l.text}
-              </div>
+              </Translated>
             ))}
           </div>
         )}
@@ -325,7 +337,9 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
           {busy ? '…' : phase === 'talking' ? '■' : '🎤'}
         </button>
         {game && phase !== 'generating' && (
-          <div className={game.status === 'won' ? 'city-goal city-goal-done' : 'city-goal'}>🎯 {game.goal}</div>
+          <Tip text={game.goalRu} className="city-goal-wrap">
+            <div className={game.status === 'won' ? 'city-goal city-goal-done' : 'city-goal'}>🎯 {game.goal}</div>
+          </Tip>
         )}
         <div className="speak-status" aria-live="polite">
           {error && <span className="speak-bad">{error}</span>}
