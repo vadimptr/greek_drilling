@@ -21,7 +21,7 @@ const SUBS: Sub[] = [
     minLevel: 'A1',
   },
   { id: 'nouns', title: 'Склонение', description: () => 'Род, падеж и число существительных', icon: '🔠', minLevel: 'A1' },
-  { id: 'aorist', title: 'Аорист', description: () => `Прошедшее время: правила и ${AORIST_VERBS.length} глаголов`, icon: '⏪', minLevel: 'A2' },
+  { id: 'aorist', title: 'Аорист', description: () => `Прошедшее время: правила и ${AORIST_VERBS.length} глаголов`, icon: '⏪', minLevel: 'A1' },
 ]
 
 export function subsFor(level: Level): Sub[] {
