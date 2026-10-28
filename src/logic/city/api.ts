@@ -15,10 +15,15 @@ export interface NoteFact {
   goal: boolean
 }
 
+export type Mood = 'friendly' | 'annoyed' | 'offended' | 'angry'
+
 export interface NotePerson {
   id: string
   name: string
   nameRu: string
+  gender: 'male' | 'female'
+  met: boolean
+  mood: Mood
   facts: NoteFact[]
   hidden: number
 }
@@ -92,6 +97,8 @@ export const talk = (gameId: string, characterId: string, from: string | null) =
   call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from })
 export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines }).then((r) => r.game)
+export const setMood = (gameId: string, characterId: string, mood: string) =>
+  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/mood`, { characterId, mood }).then((r) => r.game)
 export const revealFacts = (gameId: string, characterId: string, factIds: string[]) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/facts`, { characterId, factIds }).then((r) => r.game)
 export const completeGame = (gameId: string, characterId: string) =>

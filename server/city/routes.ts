@@ -4,9 +4,9 @@ import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
 import { ProviderError, type FactMatcher, type ScenarioGenerator, type VoiceProvider } from './providers.ts'
-import { buildPersona, card, CITY_NAME, factsOf, tellableBy, type Level } from './scenario.ts'
+import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
-  abandonActive, addFound, addLines, allGames, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  abandonActive, addFound, addHeard, addLines, allGames, linesFor, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
 } from './store.ts'
 
@@ -26,11 +26,29 @@ export function parseAllowed(raw: string | undefined): string[] {
   return (raw ?? '').split(',').map((n) => n.trim()).filter(Boolean)
 }
 
-function reachable(game: Game): Set<string> {
+function notebookIds(game: Game): string[] {
   const s = game.scenario
-  const ids = new Set([s.start_id, ...game.met])
-  for (const id of game.met) s.characters.find((c) => c.id === id)?.refers_to.forEach((r) => ids.add(r))
+  const subjects = factsOf(s).filter((f) => game.found.includes(f.id)).map((f) => f.about)
+  return [...new Set([s.start_id, ...game.met, ...game.heard, ...subjects])]
+}
+
+function reachable(game: Game): Set<string> {
+  const ids = new Set(notebookIds(game))
+  for (const id of game.met) game.scenario.characters.find((c) => c.id === id)?.refers_to.forEach((r) => ids.add(r))
   return ids
+}
+
+const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+export function mentioned(s: Scenario, text: string): string[] {
+  const t = fold(text)
+  return s.characters
+    .filter((c) => {
+      const name = fold(c.name_el)
+      const stem = name.slice(0, Math.max(4, name.length - 2))
+      return new RegExp(`(^|[^\\p{L}])${stem}`, 'u').test(t)
+    })
+    .map((c) => c.id)
 }
 
 export function score(game: Game): number {
@@ -43,9 +61,7 @@ function notebook(game: Game) {
   const s = game.scenario
   const facts = factsOf(s)
   const seen = new Set([s.start_id, ...game.met])
-  const order = [s.start_id, ...game.met, ...facts.filter((f) => game.found.includes(f.id)).map((f) => f.about)]
-  const people = [...new Set(order)]
-  return people.map((id) => {
+  return notebookIds(game).map((id) => {
     const c = s.characters.find((x) => x.id === id)!
     const own = facts.filter((f) => f.about === id)
     const visible = own.filter((f) => game.found.includes(f.id) || (f.initial && seen.has(id)))
@@ -53,6 +69,9 @@ function notebook(game: Game) {
       id,
       name: c.name_el,
       nameRu: c.name_ru,
+      gender: c.gender,
+      met: game.met.includes(id),
+      mood: game.moods[id] ?? 'friendly',
       facts: visible.map((f) => ({ id: f.id, text: f.text_ru, points: f.points, goal: f.goal })),
       hidden: own.filter((f) => !f.initial && !game.found.includes(f.id)).length,
     }
@@ -97,7 +116,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     throw new HttpError(502, e instanceof ProviderError ? 'Сервис ИИ сейчас недоступен, попробуй ещё раз' : 'Ошибка сервиса ИИ')
   }
 
-  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|complete)$/
+  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|complete)$/
 
   const totalScore = (userId: number) => allGames(db, userId).reduce((sum, g) => sum + score(g), 0)
   const view = (game: Game) => ({ ...publicGame(game), total: totalScore(game.userId) })
@@ -154,7 +173,12 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         throw new HttpError(429, 'На сегодня разговоров достаточно, город отдыхает до завтра')
       }
       const from = typeof body.from === 'string' && game.met.includes(body.from) ? body.from : null
-      const persona = buildPersona(game.scenario, characterId, game.level, game.met, from)
+      const persona = buildPersona(game.scenario, characterId, game.level, {
+        met: game.met,
+        cameFrom: from,
+        mood: game.moods[characterId] ?? 'friendly',
+        previous: linesFor(db, game, characterId, 16),
+      })
       const session = await deps.voice.open(persona).catch(providerFailure)
       recordTalk(db, game, characterId, deps.voice.id)
       markMet(db, game, characterId)
@@ -168,6 +192,8 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
         .filter((l): l is { role: string; text: string } => typeof l?.text === 'string' && (l.role === 'user' || l.role === 'agent'))
         .map((l) => ({ role: l.role, text: l.text.slice(0, MAX_LINE) }))
       addLines(db, game, characterId, lines)
+      const said = lines.filter((l) => l.role === 'agent').map((l) => l.text).join(' ')
+      addHeard(db, game, mentioned(game.scenario, said).filter((id) => id !== characterId))
       const open = tellableBy(game.scenario, characterId).filter((f) => !game.found.includes(f.id))
       if (deps.facts && open.length && lines.some((l) => l.role === 'agent')) {
         try {
@@ -177,6 +203,15 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
           console.error(e)
         }
       }
+      send(res, 200, { game: view(game) })
+      return true
+    }
+
+    if (m[2] === 'mood') {
+      if (!game.met.includes(characterId)) throw new HttpError(409, 'С этим жителем ты ещё не говорил')
+      const mood = MOODS.find((x) => x === body.mood)
+      if (!mood) throw new HttpError(400, 'Неизвестное настроение')
+      setMood(db, game, characterId, mood as Mood)
       send(res, 200, { game: view(game) })
       return true
     }

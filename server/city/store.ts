@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { Level, Scenario } from './scenario.ts'
+import type { Level, Mood, Scenario } from './scenario.ts'
 
 export type GameStatus = 'active' | 'won'
 
@@ -11,6 +11,8 @@ export interface Game {
   scenario: Scenario
   met: string[]
   found: string[]
+  heard: string[]
+  moods: Record<string, Mood>
   status: GameStatus
 }
 
@@ -21,6 +23,8 @@ interface GameRow {
   scenario: string
   met: string
   found: string
+  heard: string
+  moods: string
   status: GameStatus
 }
 
@@ -57,6 +61,8 @@ export function migrateCity(db: DatabaseSync): void {
   `)
   const cols = db.prepare('PRAGMA table_info(city_games)').all() as { name: string }[]
   if (!cols.some((c) => c.name === 'found')) db.exec("ALTER TABLE city_games ADD COLUMN found TEXT NOT NULL DEFAULT '[]'")
+  if (!cols.some((c) => c.name === 'heard')) db.exec("ALTER TABLE city_games ADD COLUMN heard TEXT NOT NULL DEFAULT '[]'")
+  if (!cols.some((c) => c.name === 'moods')) db.exec("ALTER TABLE city_games ADD COLUMN moods TEXT NOT NULL DEFAULT '{}'")
 }
 
 const toGame = (r: GameRow): Game => ({
@@ -66,6 +72,8 @@ const toGame = (r: GameRow): Game => ({
   scenario: JSON.parse(r.scenario),
   met: JSON.parse(r.met),
   found: JSON.parse(r.found),
+  heard: JSON.parse(r.heard),
+  moods: JSON.parse(r.moods),
   status: r.status,
 })
 
@@ -77,7 +85,7 @@ export function createGame(db: DatabaseSync, userId: number, level: Level, scena
   db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, userId, level, JSON.stringify(scenario), t, t,
   )
-  return { id, userId, level, scenario, met: [], found: [], status: 'active' }
+  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, status: 'active' }
 }
 
 export function findGame(db: DatabaseSync, userId: number, id: string): Game | undefined {
@@ -142,4 +150,23 @@ export function addFound(db: DatabaseSync, game: Game, factIds: string[]): strin
 
 export function allGames(db: DatabaseSync, userId: number): Game[] {
   return (db.prepare('SELECT * FROM city_games WHERE user_id = ?').all(userId) as unknown as GameRow[]).map(toGame)
+}
+
+export function addHeard(db: DatabaseSync, game: Game, ids: string[]): void {
+  const added = ids.filter((id) => !game.heard.includes(id))
+  if (!added.length) return
+  game.heard.push(...added)
+  db.prepare('UPDATE city_games SET heard = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.heard), now(), game.id)
+}
+
+export function setMood(db: DatabaseSync, game: Game, characterId: string, mood: Mood): void {
+  game.moods[characterId] = mood
+  db.prepare('UPDATE city_games SET moods = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(game.moods), now(), game.id)
+}
+
+export function linesFor(db: DatabaseSync, game: Game, characterId: string, limit: number): { role: string; text: string }[] {
+  const rows = db
+    .prepare('SELECT role, text FROM city_lines WHERE game_id = ? AND character_id = ? ORDER BY id DESC LIMIT ?')
+    .all(game.id, characterId, limit) as { role: string; text: string }[]
+  return rows.reverse()
 }

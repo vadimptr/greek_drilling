@@ -14,6 +14,8 @@ export const connect: VoiceConnector = async (connection, h) => {
       go_to: (params: Record<string, unknown>) => h.onTool('go_to', params ?? {}),
       goal_completed: (params: Record<string, unknown>) => h.onTool('goal_completed', params ?? {}),
       reveal_fact: (params: Record<string, unknown>) => h.onTool('reveal_fact', params ?? {}),
+      set_mood: (params: Record<string, unknown>) => h.onTool('set_mood', params ?? {}),
+      walk_away: (params: Record<string, unknown>) => h.onTool('walk_away', params ?? {}),
     },
     onMessage: ({ message, role }) => h.onLine(role === 'user' ? 'user' : 'agent', message),
     onModeChange: ({ mode }) => h.onMode(mode),

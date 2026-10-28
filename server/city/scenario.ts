@@ -5,6 +5,8 @@ export { CITY_NAME }
 export type Gender = 'male' | 'female'
 export type Age = 'young' | 'middle' | 'old'
 export type Level = 'A1' | 'A2' | 'B1'
+export type Mood = 'friendly' | 'annoyed' | 'offended' | 'angry'
+export const MOODS: Mood[] = ['friendly', 'annoyed', 'offended', 'angry']
 
 export interface Character {
   id: string
@@ -158,6 +160,7 @@ Facts (the player collects them for points while talking):
 - goal=true for the facts the player must find out to complete the quest (prices, times, items, address...). They are consistent with goal_check and knows. 20-30 points each. Other facts 5-15 points, rarer or more personal ones are worth more.
 - known_by: ids of the characters who can tell this fact. The character the fact is about knows it automatically; add others when they would plausibly know it (a niece knows her uncle studied in Athens). Spread clues: other characters should know some facts about the solver.
 - text_ru: the fact as it will appear in the player's notebook, in Russian, 2-8 words, without the person's name ("учился в университете Салоник", "лодка выходит в 6:00"). text_en: the same fact in English, with full detail, for the actor.
+- For every refers_to link, the referring character must know at least one fact about that person (who they are or where to find them), so the player can learn about them.
 - Facts must not contradict knows, personality or each other.${recent}`
 }
 
@@ -202,7 +205,29 @@ export function card(c: Character): CharacterCard {
 
 const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
-export function buildPersona(s: Scenario, characterId: string, level: Level, met: string[], cameFrom: string | null): Persona {
+export interface Meeting {
+  met: string[]
+  cameFrom: string | null
+  mood: Mood
+  previous: { role: string; text: string }[]
+}
+
+const REGREETING: Record<Mood, string[]> = {
+  friendly: ['Α, πάλι εσύ! Τι νέα;', 'Γεια σου ξανά! Βρήκες αυτό που έψαχνες;', 'Καλώς τον ξανά! Πες μου.'],
+  annoyed: ['Πάλι εσύ; Τι θέλεις;', 'Ναι; Τι θέλεις πάλι;'],
+  offended: ['Εσύ πάλι… Τι θέλεις;', 'Δεν έχω πολύ χρόνο. Τι θέλεις;'],
+  angry: ['Εσύ; Δεν θέλω να σου μιλήσω.', 'Φύγε, σε παρακαλώ. Δεν έχω όρεξη.'],
+}
+
+const MOOD_EN: Record<Mood, string> = {
+  friendly: 'friendly (normal)',
+  annoyed: 'annoyed with the tourist',
+  offended: 'offended by the tourist',
+  angry: 'angry at the tourist',
+}
+
+export function buildPersona(s: Scenario, characterId: string, level: Level, meeting: Meeting): Persona {
+  const { met, cameFrom, mood, previous } = meeting
   const c = s.characters.find((x) => x.id === characterId)
   if (!c) throw new Error(`unknown character ${characterId}`)
   const byId = (id: string) => s.characters.find((x) => x.id === id)!
@@ -220,10 +245,17 @@ export function buildPersona(s: Scenario, characterId: string, level: Level, met
 You are the person who can fully help. Help naturally when asked, don't hand everything over before they ask.
 As soon as the tourist has actually obtained or found out all of that from you, call the tool goal_completed (once).`
       : `Never call the tool goal_completed: you cannot complete the tourist's task yourself.`
+  const again = met.includes(c.id)
   const history = [
     metNames.length ? `The tourist has already talked to: ${metNames.join(', ')}.` : 'This is the first person the tourist talks to in town.',
-    cameFrom ? `They have just come to you after talking to ${byId(cameFrom).name_el}, who sent them to you.` : '',
+    cameFrom ? `They have just come to you after talking to ${byId(cameFrom).name_el}.` : '',
+    again ? 'You have already talked to this tourist earlier today; they are coming back to you.' : '',
   ].filter(Boolean).join(' ')
+  const earlier = previous.length
+    ? `\nYour earlier conversation with this tourist (most recent lines):\n${previous.map((l) => `${l.role === 'agent' ? 'You' : 'Tourist'}: ${l.text}`).join('\n')}\n`
+    : ''
+  const greetings = REGREETING[mood]
+  const firstMessage = again || mood !== 'friendly' ? greetings[Math.floor(Math.random() * greetings.length)] : c.greeting_el
 
   const systemPrompt = `You are ${c.name_el}, a ${AGE_EN[c.age]} ${c.gender === 'male' ? 'man' : 'woman'} living in ${CITY_NAME}: ${c.role_ru}.
 Right now you are at: ${c.place_el}.
@@ -234,6 +266,8 @@ ${LORE}
 
 You are talking face to face with a tourist who has just arrived by ferry and is learning Greek.
 ${history}
+${earlier}
+Your mood towards the tourist right now: ${MOOD_EN[mood]}.
 
 Language rules (most important):
 - Speak ONLY Greek. Never switch to Russian, English or any other language, even if asked; if the tourist does not understand, rephrase in simpler Greek or speak slower.
@@ -256,8 +290,15 @@ ${solverPart}
 Behaviour:
 - Behave like a real person from a small Greek town, not like an assistant. Answer what you are asked, don't volunteer everything at once. You may chat about your life and the town.
 - When the tourist says goodbye or decides to go to one of the people listed above, say a short goodbye and then call the tool go_to with that person's id.
-- Never say ids, tool names or that you are an AI. Never invent people outside the list as solutions to the task.`
+- Never say ids, tool names or that you are an AI. Never invent people outside the list as solutions to the task.
+
+Feelings:
+- You are a real person with feelings and dignity. If the tourist is rude, insults you, mocks you, makes vulgar or inappropriate remarks, flirts aggressively, threatens, or keeps talking deliberate nonsense, react like a real person from a small town: get annoyed, offended or angry depending on how bad it is, and show it in your words and tone.
+- While you are offended or angry, don't share facts and don't help; you may answer coldly or ask them to apologise. A sincere apology («συγγνώμη») softens you step by step; you may forgive.
+- Language mistakes, misunderstandings, clumsy phrasing or silence are NOT rudeness: be patient with a learner.
+- Whenever your mood towards the tourist changes, call the tool set_mood with the new mood: friendly, annoyed, offended or angry.
+- If you are angry and the tourist keeps being rude, say one short final line and call the tool walk_away.`
 
   const keywords = [CITY_NAME, ...s.characters.map((x) => x.name_el), c.place_el].slice(0, 50)
-  return { systemPrompt, firstMessage: c.greeting_el, language: 'el', keywords, voice: { gender: c.gender, age: c.age, index: s.characters.indexOf(c) } }
+  return { systemPrompt, firstMessage, language: 'el', keywords, voice: { gender: c.gender, age: c.age, index: s.characters.indexOf(c) } }
 }

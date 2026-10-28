@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, revealFacts, saveLines, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, newGame, revealFacts, saveLines, setMood, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { CITY_NAME } from '../logic/city/name'
@@ -54,6 +54,8 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
   const linesRef = useRef<Line[]>([])
   const modeRef = useRef<'speaking' | 'listening'>('listening')
   const pendingRef = useRef<string | null>(null)
+  const walkAwayRef = useRef(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const wonRef = useRef(false)
   const timerRef = useRef<number | undefined>(undefined)
   const callSeq = useRef(0)
@@ -135,6 +137,11 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
     if (g && from && linesRef.current.length) void saveLines(g.id, from, linesRef.current).then(applyIfCurrent).catch(() => undefined)
     const target = pendingRef.current
     pendingRef.current = null
+    if (walkAwayRef.current) {
+      walkAwayRef.current = false
+      const who = g?.notebook.find((p) => p.id === from)
+      setNotice(`${who?.name ?? 'Собеседник'} не хочет больше с тобой разговаривать`)
+    }
     if (wonRef.current) {
       setPhase('won')
     } else if (target && g) {
@@ -155,7 +162,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
       if (seq !== callSeq.current) return
       modeRef.current = mode
       setSpeaking(mode === 'speaking')
-      if (!pendingRef.current) return
+      if (!pendingRef.current && !walkAwayRef.current) return
       if (mode === 'speaking') window.clearTimeout(timerRef.current)
       else scheduleLeave(LEAVE_AFTER_SPEECH_MS)
     },
@@ -168,6 +175,17 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
         if (target === current || !g.characters.some((c) => c.id === target)) return 'unknown person'
         pendingRef.current = target
         scheduleLeave(modeRef.current === 'listening' ? LEAVE_IF_SILENT_MS : 15_000)
+        return 'ok'
+      }
+      if (name === 'set_mood') {
+        const mood = String(params.mood ?? '')
+        if (mood) void setMood(g.id, current, mood).then(applyIfCurrent).catch(() => undefined)
+        return 'ok'
+      }
+      if (name === 'walk_away') {
+        walkAwayRef.current = true
+        pendingRef.current = null
+        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_SPEECH_MS : 15_000)
         return 'ok'
       }
       if (name === 'reveal_fact') {
@@ -192,6 +210,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
 
   const connectTo = async (g: CityGame, characterId: string, from: string | null) => {
     setError(null)
+    setNotice(null)
     setPhase('connecting')
     const seq = ++callSeq.current
     try {
@@ -249,12 +268,18 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
 
   const approach = (id: string) => {
     const g = gameRef.current
-    if (g && phase === 'idle') void connectTo(g, id, currentRef.current)
+    if (!g || g.status !== 'active' || id === currentRef.current) return
+    if (phase === 'talking') {
+      pendingRef.current = id
+      leave()
+    } else if (phase === 'idle') {
+      void connectTo(g, id, currentRef.current)
+    }
   }
+
 
   const busy = phase === 'loading' || phase === 'generating' || phase === 'connecting' || phase === 'walking'
   const active = game && game.status === 'active'
-  const known = active ? game.characters.filter((c) => game.known.includes(c.id)) : []
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
 
   return (
@@ -304,6 +329,7 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
         )}
         <div className="speak-status" aria-live="polite">
           {error && <span className="speak-bad">{error}</span>}
+          {!error && notice && phase === 'idle' && <span className="speak-bad">{notice}</span>}
           {!error && phase === 'connecting' && 'Подхожу…'}
           {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
           {!error && phase === 'won' && 'Нажми на микрофон — будет новое задание'}
@@ -317,16 +343,6 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
           )}
           {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
         </div>
-        {phase === 'idle' && known.length > 0 && (
-          <div className="city-people">
-            {known.map((c) => (
-              <button key={c.id} className="secondary-btn" onClick={() => approach(c.id)}>
-                {c.name}
-                <span className="city-people-role">{c.role}</span>
-              </button>
-            ))}
-          </div>
-        )}
         <div className="speak-actions">
           {allowed && (
             <button className="secondary-btn" onClick={toggleSubs}>
@@ -341,7 +357,16 @@ export function CityScreen({ allowed, signedIn, level, onSignIn, onTotal }: Prop
         </div>
       </div>
     </main>
-      {allowed && game && <Notebook people={game.notebook} score={game.score} fresh={fresh} />}
+      {allowed && game && (
+        <Notebook
+          people={game.notebook}
+          score={game.score}
+          fresh={fresh}
+          current={phase === 'talking' || phase === 'connecting' ? currentRef.current : null}
+          canPick={active === true && (phase === 'idle' || phase === 'talking')}
+          onPick={approach}
+        />
+      )}
     </div>
   )
 }

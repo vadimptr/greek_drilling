@@ -1,23 +1,50 @@
-import type { NotePerson } from '../../logic/city/api'
+import type { Mood, NotePerson } from '../../logic/city/api'
 
 interface Props {
   people: NotePerson[]
   score: number
   fresh: Set<string>
+  current: string | null
+  canPick: boolean
+  onPick: (id: string) => void
 }
 
-export function Notebook({ people, score, fresh }: Props) {
+const ATTITUDE: Record<Mood, { male: string; female: string; icon: string }> = {
+  friendly: { male: 'дружелюбен', female: 'дружелюбна', icon: '🙂' },
+  annoyed: { male: 'раздражён', female: 'раздражена', icon: '😒' },
+  offended: { male: 'обижен', female: 'обижена', icon: '😤' },
+  angry: { male: 'зол на тебя', female: 'зла на тебя', icon: '😠' },
+}
+
+export function attitude(p: NotePerson): string {
+  if (!p.met) return 'не знакомы'
+  const a = ATTITUDE[p.mood]
+  return `${a.icon} ${a[p.gender]}`
+}
+
+export function Notebook({ people, score, fresh, current, canPick, onPick }: Props) {
   return (
     <aside className="notebook" aria-label="Блокнот">
       <div className="notebook-head">
         <span className="notebook-title">📓 Блокнот</span>
         <span className="notebook-score">{score} очк.</span>
       </div>
+      <div className="notebook-tip">Нажми на имя, чтобы подойти к человеку</div>
       {people.map((p) => (
         <section key={p.id} className="notebook-person">
-          <div className="notebook-name">
-            {p.name} <span className="notebook-name-ru">{p.nameRu}</span>
-          </div>
+          <button
+            className={p.id === current ? 'notebook-name notebook-name-current' : 'notebook-name'}
+            onClick={() => onPick(p.id)}
+            disabled={!canPick || p.id === current}
+          >
+            <span>
+              {p.id === current && '🗣️ '}
+              {p.name} <span className="notebook-name-ru">{p.nameRu}</span>
+            </span>
+            <span className={`notebook-mood notebook-mood-${p.met ? p.mood : 'stranger'}`}>
+              {attitude(p)}
+            </span>
+          </button>
           <ul className="notebook-facts">
             {p.facts.map((f) => (
               <li key={f.id} className={fresh.has(f.id) ? 'notebook-fact notebook-fact-fresh' : 'notebook-fact'}>

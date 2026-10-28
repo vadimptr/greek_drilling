@@ -546,9 +546,6 @@
 .city-subs { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; text-align: left; }
 .city-line { font-size: 15px; line-height: 1.35; padding: 6px 10px; border-radius: 12px; background: var(--card); align-self: flex-start; max-width: 90%; }
 .city-line-me { align-self: flex-end; background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.city-people { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
-.city-people .secondary-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px; }
-.city-people-role { font-size: 12px; color: var(--muted); font-weight: 400; }
 
 .city-layout { display: flex; flex-direction: column; gap: 16px; }
 .city-layout > .city { flex: 1; }
@@ -566,7 +563,32 @@
 .notebook-title { font-weight: 700; font-size: 16px; }
 .notebook-score { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 .notebook-person { display: flex; flex-direction: column; gap: 6px; }
-.notebook-name { font-weight: 600; font-size: 17px; }
+.notebook-tip { font-size: 12px; color: var(--muted); margin-top: -8px; }
+.notebook-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  width: calc(100% + 16px);
+  text-align: left;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 17px;
+  cursor: pointer;
+}
+.notebook-name:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.notebook-name:disabled { cursor: default; }
+.notebook-name-current { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.notebook-mood { font-size: 13px; font-weight: 500; white-space: nowrap; color: var(--muted); }
+.notebook-mood-friendly { color: var(--ok); }
+.notebook-mood-annoyed { color: #d97706; }
+.notebook-mood-offended, .notebook-mood-angry { color: var(--bad); }
 .notebook-name-ru { font-weight: 400; font-size: 13px; color: var(--muted); }
 .notebook-facts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .notebook-fact {
