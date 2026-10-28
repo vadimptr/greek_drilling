@@ -9,7 +9,7 @@ export interface ImageGenerator {
 }
 
 const STYLE = `Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition. Absolutely no text, letters, signs, boat names or captions anywhere in the image.
-Setting: a small fictional fishing town on the Aegean coast of Greece — whitewashed houses with blue doors and shutters, bougainvillea, stone lanes, fishing boats (kaikia), the sea always nearby.`
+Setting: a small fictional harbour town on the Aegean coast of Greece — whitewashed houses with blue doors and shutters, bougainvillea, stone lanes, fishing boats (kaikia), the sea always nearby.`
 
 const AGE: Record<Character['age'], string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
@@ -19,8 +19,26 @@ Scene, first-person view (the viewer is not visible): ${c.name_el}, a ${AGE[c.ag
 ${c.personality} The person is in the middle of the frame, looking towards the viewer in a friendly way, the place around them is clearly visible.`
 }
 
+export class Timing {
+  private avg: number
+  constructor(initialMs: number) {
+    this.avg = initialMs
+  }
+  get ms(): number {
+    return Math.round(this.avg)
+  }
+  record(ms: number): void {
+    this.avg = this.avg * 0.7 + ms * 0.3
+  }
+}
+
+export type SceneState = { state: 'ready' } | { state: 'queued' } | { state: 'drawing'; elapsedMs: number; expectedMs: number } | { state: 'none' }
+
 export class SceneStore {
   private pending = new Map<string, Promise<void>>()
+  private started = new Map<string, number>()
+  private queued = new Set<string>()
+  readonly timing = new Timing(35_000)
   private pausedUntil = 0
   private dir: string
   private generator: ImageGenerator | null
@@ -47,9 +65,20 @@ export class SceneStore {
     return existsSync(p) ? readFileSync(p) : null
   }
 
+  status(gameId: string, characterId: string): SceneState {
+    if (this.has(gameId, characterId)) return { state: 'ready' }
+    const key = `${gameId}/${characterId}`
+    const at = this.started.get(key)
+    if (at !== undefined) return { state: 'drawing', elapsedMs: Date.now() - at, expectedMs: this.timing.ms }
+    if (this.queued.has(key)) return { state: 'queued' }
+    return { state: 'none' }
+  }
+
   ensureAll(gameId: string, s: Scenario): Promise<void> {
     const order = [s.start_id, ...s.characters.map((c) => c.id).filter((id) => id !== s.start_id)]
-    return order.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!)), Promise.resolve())
+    const todo = order.filter((id) => !this.has(gameId, id) && !this.pending.has(`${gameId}/${id}`))
+    if (this.enabled) todo.forEach((id) => this.queued.add(`${gameId}/${id}`))
+    return todo.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!)), Promise.resolve())
   }
 
   ensure(gameId: string, c: Character): Promise<void> {
@@ -57,9 +86,13 @@ export class SceneStore {
     const key = `${gameId}/${c.id}`
     const running = this.pending.get(key)
     if (running) return running
+    this.queued.delete(key)
+    const startedAt = Date.now()
+    this.started.set(key, startedAt)
     const job = this.generator!
       .generate(scenePrompt(c))
       .then((png) => {
+        this.timing.record(Date.now() - startedAt)
         mkdirSync(join(this.dir, gameId), { recursive: true })
         writeFileSync(this.path(gameId, c.id), png)
       })
@@ -67,7 +100,11 @@ export class SceneStore {
         if (e instanceof ProviderError && /\b(402|429)\b|paid_plan_required|quota/i.test(e.message)) this.pausedUntil = Date.now() + 15 * 60_000
         console.error(`scene ${key}:`, e instanceof Error ? e.message : e)
       })
-      .finally(() => this.pending.delete(key))
+      .finally(() => {
+        this.pending.delete(key)
+        this.started.delete(key)
+        this.queued.delete(key)
+      })
     this.pending.set(key, job)
     return job
   }

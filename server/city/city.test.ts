@@ -7,7 +7,8 @@ import { openDb } from '../db.ts'
 import { elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
 import type { CityDeps } from './routes.ts'
 import { buildPersona, validateScenario, type Fact, type Scenario } from './scenario.ts'
-import { mentioned } from './routes.ts'
+import { leaderboard, mentioned } from './routes.ts'
+import type { Game } from './store.ts'
 
 const SECRET = 'test-secret-0123456789'
 
@@ -75,7 +76,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
 
 test('city is visible only to allowed users', async () => {
   const { call, login, close } = await start()
-  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, city: 'Μυθόπολη', total: 0 })
+  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, city: 'Μυθόπολη', total: 0, storyMs: 40000 })
   const guest = await login('Guest')
   assert.equal((await call('GET', '/api/city', undefined, guest)).body.allowed, false)
   assert.equal((await call('POST', '/api/city/games', {}, guest)).status, 403)
@@ -316,4 +317,22 @@ test('old games without Greek goal get it filled in once on load', async () => {
   assert.equal(game.goalRu, 'Узнай у рыбака, что он поймал')
   assert.equal(game.characters[0].role, 'el:племянница рыбака')
   await close()
+})
+
+test('leaderboard ranks players per category, hides other names, keeps you visible', () => {
+  const s = validateScenario(scenario())
+  const g = (userId: number, found: string[], won: boolean): Game => ({
+    id: `g${userId}${found.join('')}`, userId, level: 'A2', scenario: s, met: [], found, heard: [], moods: {}, reasons: {}, status: won ? 'won' : 'active',
+  })
+  const games = [g(1, ['f2'], false), g(2, ['f5', 'f6'], true), g(3, ['f2', 'f4'], true), g(3, [], true)]
+  const boards = leaderboard(games, 1, (id) => `user${id}`)
+  const points = boards.find((b) => b.category === 'points')!
+  assert.deepEqual(points.rows, [
+    { rank: 1, value: 50, you: false, name: null },
+    { rank: 2, value: 22, you: false, name: null },
+    { rank: 3, value: 10, you: true, name: 'user1' },
+  ])
+  assert.deepEqual(boards.find((b) => b.category === 'quests')!.rows.map((r) => [r.rank, r.value, r.you]), [[1, 2, false], [2, 1, false], [3, 0, true]])
+  const lonely = leaderboard([], 7, () => 'me')
+  assert.deepEqual(lonely[0].rows, [{ rank: 1, value: 0, you: true, name: 'me' }])
 })

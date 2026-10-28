@@ -1,4 +1,5 @@
 import type { Mood, NotePerson } from '../../logic/city/api'
+import { Leaderboard } from './Leaderboard'
 import { Tip } from './Tip'
 
 interface Props {
@@ -34,7 +35,9 @@ export function Notebook({ people, score, fresh, current, canPick, onPick }: Pro
     <aside className="notebook" aria-label="Блокнот">
       <div className="notebook-head">
         <span className="notebook-title">📓 Блокнот</span>
-        <span className="notebook-score">{score} очк.</span>
+        <Leaderboard>
+          <span className="notebook-score">{score} очк. 🏆</span>
+        </Leaderboard>
       </div>
       <div className="notebook-tip">Нажми на имя, чтобы подойти к человеку</div>
       {people.map((p) => (

@@ -5,6 +5,7 @@ import {
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
 import { Translated } from '../components/city/Translated'
+import { Progress } from '../components/city/Progress'
 import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
@@ -16,6 +17,7 @@ interface Props {
   signedIn: boolean
   level: Level
   speed: number
+  storyMs: number
   onSignIn: () => void
   onTotal: (total: number) => void
 }
@@ -40,7 +42,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -53,6 +55,8 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
   const speedRef = useRef(speed)
   speedRef.current = speed
   const [fresh, setFresh] = useState<Set<string>>(new Set())
+  const [storyStartedAt, setStoryStartedAt] = useState(0)
+  const [gameAt, setGameAt] = useState(() => Date.now())
   const freshTimer = useRef<number | undefined>(undefined)
 
   const gameRef = useRef<CityGame | null>(null)
@@ -81,6 +85,7 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
     if (g?.status === 'won' && callRef.current) wonRef.current = true
     gameRef.current = g
     setGame(g)
+    setGameAt(Date.now())
     if (g) onTotal(g.total)
   }
 
@@ -246,16 +251,28 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
   }
 
   const startNew = async () => {
+    const previous = gameRef.current
+    const previousCharacter = character
     setError(null)
+    setNotice(null)
     setPhase('generating')
+    setStoryStartedAt(Date.now())
     setCharacter(null)
+    setLines([])
     currentRef.current = null
     wonRef.current = false
+    gameRef.current = null
+    setGame(null)
     try {
       const g = await newGame(level)
       applyGame(g)
       await connectTo(g, g.startId, null)
     } catch (e) {
+      if (previous?.status === 'active') {
+        gameRef.current = previous
+        setGame(previous)
+        setCharacter(previousCharacter)
+      }
       setError(errorText(e))
       setPhase('idle')
     }
@@ -306,13 +323,14 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
   const sceneOf = (id: string | null | undefined) => (id ? (game?.characters.find((c) => c.id === id)?.scene ?? null) : null)
   const shownId = character?.id ?? (active ? game?.startId : null)
   const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
+  const sceneState = phase === 'generating' || phase === 'walking' || scene ? null : game?.characters.find((c) => c.id === shownId)?.sceneState
   const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'idle')
 
   return (
     <div className="city-layout">
       <main className="city">
         {game && phase !== 'generating' && (
-          <Tip text={game.goalRu} className="city-goal-wrap">
+          <Tip text={game.goalRu} className="city-goal-wrap" placement="below">
             <div className={game.status === 'won' ? 'city-goal city-goal-done' : 'city-goal'}>🎯 {game.goal}</div>
           </Tip>
         )}
@@ -330,7 +348,11 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
           </div>
 
           <div className="city-overlay">
-            {phase === 'generating' && <div className="city-hint">Придумываю историю…</div>}
+            {phase === 'generating' && <Progress label="Придумываю историю…" startedAt={storyStartedAt} expectedMs={storyMs} />}
+            {phase !== 'generating' && sceneState?.state === 'drawing' && (
+              <Progress label="Рисую сцену…" startedAt={gameAt - sceneState.elapsedMs} expectedMs={sceneState.expectedMs} />
+            )}
+            {phase !== 'generating' && sceneState?.state === 'queued' && <div className="city-hint city-hint-small">🎨 Сцена в очереди на отрисовку</div>}
             {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
             {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
             {phase === 'idle' && !character && (

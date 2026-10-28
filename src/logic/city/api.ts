@@ -9,7 +9,14 @@ export interface CharacterCard {
   place: string
   placeRu: string
   scene?: string | null
+  sceneState?: SceneState
 }
+
+export type SceneState =
+  | { state: 'ready' }
+  | { state: 'queued' }
+  | { state: 'drawing'; elapsedMs: number; expectedMs: number }
+  | { state: 'none' }
 
 export interface NoteFact {
   id: string
@@ -89,13 +96,28 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T
 }
 
-export async function cityAccess(): Promise<{ allowed: boolean; total: number }> {
+export async function cityAccess(): Promise<{ allowed: boolean; total: number; storyMs: number }> {
   try {
     return await call('GET', '/api/city')
   } catch {
-    return { allowed: false, total: 0 }
+    return { allowed: false, total: 0, storyMs: 40_000 }
   }
 }
+
+export interface BoardRow {
+  rank: number
+  value: number
+  you: boolean
+  name: string | null
+}
+
+export interface Board {
+  category: 'points' | 'quests' | 'facts'
+  players: number
+  rows: BoardRow[]
+}
+
+export const leaderboard = () => call<{ boards: Board[] }>('GET', '/api/city/leaderboard').then((r) => r.boards)
 
 export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/city/games/current').then((r) => r.game)
 export const newGame = (level: Level) => call<{ game: CityGame }>('POST', '/api/city/games', { level }).then((r) => r.game)

@@ -64,7 +64,8 @@ export interface Persona {
   voice: { gender: Gender; age: Age; index: number }
 }
 
-export const LORE = `${CITY_NAME} is a small fictional fishing town on the Aegean coast of Greece. It does not exist on any map.
+export const LORE = `${CITY_NAME} is a small fictional harbour town (κωμόπολη, about 3000 people) on the Aegean coast of Greece. It does not exist on any map.
+It is a town, not a village: locals call it «η πόλη μας» or simply «η Μυθόπολη», never «χωριό». It has neighbourhoods: Λιμάνι (the harbour), Πλατεία (the centre), Πάνω Γειτονιά (the upper town on the hill).
 The ferry from Piraeus arrives at the harbour (λιμάνι) twice a day. Places: the harbour with fishing boats (καΐκια) and the fish market (ψαραγορά);
 the square with an old plane tree (η πλατεία με τον πλάτανο) and the καφενείο «Η Ωραία Ελένη» where old men play τάβλι;
 the bakery (φούρνος) of the Papadopoulos family; the grocery (μπακάλικο) «Ο Μανώλης»; the taverna «Ο Γλάρος» on the beach;
@@ -149,6 +150,7 @@ Invent a new one in this spirit, with concrete details the player has to find ou
 
 Rules:
 - goal_ru: the task for the player in Russian, 1-2 sentences, imperative ("Узнай…", "Купи…"). Name the person by role or name but do not explain where to find them.
+- In all Russian texts the town is «городок» or «Мифополи», never «деревня».
 - goal_el: the same task in Greek, at level ${level}, short and clear ("Μάθε…", "Αγόρασε…").
 - goal_check: in English, what exactly the player must have obtained or found out for the goal to count as done (concrete facts, numbers, items).
 - 3 to 5 characters. Greek names. ids are short lowercase latin slugs (e.g. "yiannis").

@@ -3,11 +3,11 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
-import { imageType, type SceneStore } from './images.ts'
+import { imageType, Timing, type SceneStore } from './images.ts'
 import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
-  abandonActive, addFound, addHeard, addLines, allGames, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  abandonActive, addFound, addHeard, addLines, allGames, everyGame, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
 } from './store.ts'
 
@@ -99,8 +99,46 @@ function publicGame(game: Game, scenes: SceneStore | null) {
     status: game.status,
     startId: s.start_id,
     met: game.met,
-    characters: s.characters.map((c) => ({ ...card(c), scene: sceneUrl(c.id) })),
+    characters: s.characters.map((c) => ({
+      ...card(c),
+      scene: sceneUrl(c.id),
+      sceneState: scenes ? scenes.status(game.id, c.id) : { state: 'none' },
+    })),
   }
+}
+
+export type Category = 'points' | 'quests' | 'facts'
+const CATEGORIES: Category[] = ['points', 'quests', 'facts']
+const TOP = 10
+
+export function leaderboard(games: Game[], userId: number, nameOf: (id: number) => string) {
+  const stats = new Map<number, Record<Category, number>>()
+  for (const g of games) {
+    const st = stats.get(g.userId) ?? { points: 0, quests: 0, facts: 0 }
+    st.points += score(g)
+    st.quests += g.status === 'won' ? 1 : 0
+    st.facts += g.found.length
+    stats.set(g.userId, st)
+  }
+  if (!stats.has(userId)) stats.set(userId, { points: 0, quests: 0, facts: 0 })
+  const board = (cat: Category) => {
+    const sorted = [...stats.entries()].sort((a, b) => b[1][cat] - a[1][cat] || (a[0] === userId ? -1 : b[0] === userId ? 1 : 0))
+    const rows = sorted.map(([id, st], i) => ({
+      rank: sorted.findIndex(([, x]) => x[cat] === st[cat]) + 1,
+      value: st[cat],
+      you: id === userId,
+      name: id === userId ? nameOf(id) : null,
+      index: i,
+    }))
+    const mine = rows.find((r) => r.you)!
+    const shown = rows.slice(0, TOP)
+    return {
+      category: cat,
+      players: rows.length,
+      rows: (mine.index < TOP ? shown : [...shown, mine]).map(({ index: _i, ...r }) => r),
+    }
+  }
+  return CATEGORIES.map(board)
 }
 
 export function createCity(db: DatabaseSync, deps: CityDeps) {
@@ -137,6 +175,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     return ru
   }
 
+  const storyTiming = new Timing(40_000)
   const greekFilled = new Set<string>()
   const ensureGreek = async (game: Game) => {
     const s = game.scenario
@@ -169,7 +208,23 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     const method = req.method ?? 'GET'
 
     if (method === 'GET' && path === '/api/city') {
-      send(res, 200, { allowed: isAllowed(user), city: CITY_NAME, total: isAllowed(user) ? totalScore(user!.id) : 0 })
+      send(res, 200, {
+        allowed: isAllowed(user),
+        city: CITY_NAME,
+        total: isAllowed(user) ? totalScore(user!.id) : 0,
+        storyMs: storyTiming.ms,
+      })
+      return true
+    }
+
+    if (method === 'GET' && path === '/api/city/leaderboard') {
+      const u = requireAllowed(user)
+      const names = new Map<number, string>()
+      const nameOf = (id: number) => {
+        if (!names.has(id)) names.set(id, (db.prepare('SELECT name FROM users WHERE id = ?').get(id) as { name: string } | undefined)?.name ?? '')
+        return names.get(id)!
+      }
+      send(res, 200, { boards: leaderboard(everyGame(db), u.id, nameOf) })
       return true
     }
 
@@ -199,7 +254,9 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       if (!deps.scenarios) throw new HttpError(503, 'Генератор сценариев не настроен')
       const body = await readJson(req)
       const level = LEVELS.find((l) => l === body.level) ?? 'A2'
+      const startedAt = Date.now()
       const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id)).catch(providerFailure)
+      storyTiming.record(Date.now() - startedAt)
       abandonActive(db, u.id)
       const game = createGame(db, u.id, level, scenario)
       void deps.scenes?.ensureAll(game.id, scenario)

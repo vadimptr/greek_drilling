@@ -181,3 +181,7 @@ export function linesFor(db: DatabaseSync, game: Game, characterId: string, limi
     .all(game.id, characterId, limit) as { role: string; text: string }[]
   return rows.reverse()
 }
+
+export function everyGame(db: DatabaseSync): Game[] {
+  return (db.prepare('SELECT * FROM city_games').all() as unknown as GameRow[]).map(toGame)
+}
