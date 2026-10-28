@@ -153,6 +153,7 @@ test('persona speaks only Greek at the chosen level and lists contacts', () => {
   assert.match(p.systemPrompt, /CEFR A1/)
   assert.match(p.systemPrompt, /id "yiannis": Γιάννης/)
   assert.match(p.systemPrompt, /Never call the tool goal_completed/)
+  assert.match(p.systemPrompt, /cannot leave\. Never offer to go somewhere together/)
   assert.equal(p.language, 'el')
   assert.ok(p.keywords.includes('Μυθόπολη'))
 })
