@@ -42,7 +42,7 @@ export interface Persona {
   firstMessage: string
   language: 'el'
   keywords: string[]
-  voice: { gender: Gender; age: Age }
+  voice: { gender: Gender; age: Age; index: number }
 }
 
 export const LORE = `${CITY_NAME} is a small fictional fishing town on the Aegean coast of Greece. It does not exist on any map.
@@ -196,5 +196,5 @@ Behaviour:
 - Never say ids, tool names or that you are an AI. Never invent people outside the list as solutions to the task.`
 
   const keywords = [CITY_NAME, ...s.characters.map((x) => x.name_el), c.place_el].slice(0, 50)
-  return { systemPrompt, firstMessage: c.greeting_el, language: 'el', keywords, voice: { gender: c.gender, age: c.age } }
+  return { systemPrompt, firstMessage: c.greeting_el, language: 'el', keywords, voice: { gender: c.gender, age: c.age, index: s.characters.indexOf(c) } }
 }

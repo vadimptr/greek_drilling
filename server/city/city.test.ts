@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createApp } from '../app.ts'
 import { openDb } from '../db.ts'
-import { elevenLabsVoice, parseVoices } from './elevenlabs.ts'
+import { elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
 import type { CityDeps } from './routes.ts'
 import { buildPersona, validateScenario, type Scenario } from './scenario.ts'
 
@@ -139,7 +139,7 @@ test('persona speaks only Greek at the chosen level and lists contacts', () => {
 
 test('elevenlabs session carries token, persona overrides and the matching voice', async () => {
   const voices = parseVoices('male-old=v1, female=v2, junk, robot=v3')
-  assert.deepEqual(voices, { 'male-old': 'v1', female: 'v2' })
+  assert.deepEqual(voices, { 'male-old': ['v1'], female: ['v2'] })
   let url = ''
   const fakeFetch = (async (u: string) => {
     url = u
@@ -152,4 +152,14 @@ test('elevenlabs session carries token, persona overrides and the matching voice
   const conn = s.connection as { conversationToken: string; overrides: { tts: { voiceId?: string; speed: number } } }
   assert.equal(conn.conversationToken, 'tok')
   assert.deepEqual(conn.overrides.tts, { voiceId: 'v2', speed: 0.9 })
+})
+
+test('voices rotate within a slot and fall back to the nearest age', () => {
+  const voices = parseVoices('male-young=a|b, male-middle=c, female-middle=d|e')
+  assert.equal(pickVoice(voices, 'male', 'young', 0), 'a')
+  assert.equal(pickVoice(voices, 'male', 'young', 3), 'b')
+  assert.equal(pickVoice(voices, 'male', 'old', 0), 'c')
+  assert.equal(pickVoice(voices, 'female', 'old', 1), 'e')
+  assert.equal(pickVoice(voices, 'female', 'young', 2), 'd')
+  assert.equal(pickVoice({}, 'female', 'young', 0), undefined)
 })
