@@ -6,6 +6,21 @@ export type Gender = 'male' | 'female'
 export type Age = 'young' | 'middle' | 'old'
 export type Level = 'A1' | 'A2' | 'B1'
 export type Mood = 'friendly' | 'annoyed' | 'offended' | 'angry'
+export type TimeOfDay = 'morning' | 'noon' | 'evening' | 'night'
+
+export function timeOfDay(hour: number): TimeOfDay {
+  if (hour >= 6 && hour < 12) return 'morning'
+  if (hour >= 12 && hour < 17) return 'noon'
+  if (hour >= 17 && hour < 21) return 'evening'
+  return 'night'
+}
+
+export const TIME_EN: Record<TimeOfDay, string> = {
+  morning: 'morning: shops and the bakery are opening, fishermen are back from the sea, people greet with «Καλημέρα»',
+  noon: 'midday and early afternoon: hot sun, some shops close for the siesta, people greet with «Γεια σου» or «Καλησπέρα» after noon',
+  evening: 'evening: sunset, people walk on the waterfront, tavernas and the café are full, people greet with «Καλησπέρα»',
+  night: 'night: most shops are closed, the taverna, the café and the kiosk may still be open, people greet with «Καλησπέρα» and say «Καληνύχτα» when leaving',
+}
 export const MOODS: Mood[] = ['friendly', 'annoyed', 'offended', 'angry']
 
 export interface Character {
@@ -37,6 +52,7 @@ export interface Fact {
 }
 
 export interface Scenario {
+  time_of_day?: TimeOfDay
   goal_ru: string
   goal_el?: string
   goal_check: string
@@ -155,13 +171,13 @@ export const LOGIC_RULES = `- The player is already in ${CITY_NAME}, walking aro
 - Facts, prices, times, names and places are the same in every character's knows and facts; nobody contradicts anybody; the goal facts together cover the whole goal_check.
 - goal_ru and goal_el say the same thing; nothing in the goal is ambiguous or impossible.`
 
-export function scenarioRequest(level: Level, recentGoals: string[], problems: string[] = []): string {
+export function scenarioRequest(level: Level, recentGoals: string[], problems: string[] = [], time?: TimeOfDay): string {
   const recent = recentGoals.length
     ? `\nRecent goals of this player (make the new one clearly different):\n${recentGoals.map((g) => `- ${g}`).join('\n')}`
     : ''
   return `${LORE}
 
-The player is a tourist who has just arrived in ${CITY_NAME} by ferry. They are learning Greek (level ${level}) and will talk by voice to the townspeople.
+${time ? `It is ${TIME_EN[time]}. The quest happens right now, at this time of day: only places that are open now, people where they would be now, greetings that fit.\n\n` : ''}The player is a tourist who has just arrived in ${CITY_NAME} by ferry. They are learning Greek (level ${level}) and will talk by voice to the townspeople.
 Invent one small everyday quest that the player completes only by talking to people. Examples of the kind of quest:
 - buy a set of groceries from the shopkeeper and ask how to cook a Greek dish with them;
 - go to the harbour and find out from a fisherman what he caught today, what he sells and for how much;
@@ -305,7 +321,7 @@ ${LORE}
 You are talking face to face with a tourist who has just arrived by ferry and is learning Greek.
 ${history}
 ${earlier}
-Your mood towards the tourist right now: ${MOOD_EN[mood]}.
+${s.time_of_day ? `Time of day: ${TIME_EN[s.time_of_day]}.\n` : ''}Your mood towards the tourist right now: ${MOOD_EN[mood]}.
 ${levelNotes.length ? `\nLast time some of your phrases were too difficult for the tourist's level. Avoid this:\n${levelNotes.map((n) => `- ${n}`).join('\n')}\n` : ''}
 Language rules (most important):
 - Speak ONLY Greek. Never switch to Russian, English or any other language, even if asked; if the tourist does not understand, rephrase in simpler Greek or speak slower.

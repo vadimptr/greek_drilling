@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
-import { CITY_NAME, LOGIC_RULES, LORE, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario } from './scenario.ts'
+import { CITY_NAME, LOGIC_RULES, LORE, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario, type TimeOfDay } from './scenario.ts'
 
 const MODEL = 'claude-opus-5-5'
 const ATTEMPTS = 2
@@ -36,14 +36,14 @@ export async function draftAndReview(
 export function claudeScenarios(apiKey: string): ScenarioGenerator {
   const client = new Anthropic({ apiKey, timeout: 90_000 })
 
-  const once = async (level: Level, recentGoals: string[], problems: string[]): Promise<Scenario> => {
+  const once = async (level: Level, recentGoals: string[], problems: string[], time?: TimeOfDay): Promise<Scenario> => {
     const response = await client.beta.messages.create({
       model: MODEL,
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCENARIO_SCHEMA } },
-      messages: [{ role: 'user', content: scenarioRequest(level, recentGoals, problems) }],
+      messages: [{ role: 'user', content: scenarioRequest(level, recentGoals, problems, time) }],
     })
     if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to write a scenario')
     if (response.stop_reason === 'max_tokens') throw new ProviderError('Claude scenario was cut off')
@@ -82,11 +82,13 @@ Is it logical and consistent? ok=true if there are no real problems. Otherwise o
   }
 
   return {
-    async generate(level, recentGoals) {
+    async generate(level, recentGoals, time) {
       let last: unknown
       for (let i = 0; i < ATTEMPTS; i++) {
         try {
-          return await draftAndReview((problems) => once(level, recentGoals, problems), review, 3)
+          const s = await draftAndReview((problems) => once(level, recentGoals, problems, time), review, 3)
+          if (time) s.time_of_day = time
+          return s
         } catch (e) {
           last = e
           if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) break

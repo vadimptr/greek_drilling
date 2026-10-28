@@ -1,7 +1,7 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ProviderError } from './providers.ts'
-import type { Character, Scenario } from './scenario.ts'
+import type { Character, Scenario, TimeOfDay } from './scenario.ts'
 
 export interface ImageGenerator {
   id: string
@@ -13,10 +13,17 @@ Setting: a small fictional harbour town on the Aegean coast of Greece — whitew
 
 const AGE: Record<Character['age'], string> = { young: 'young adult (25 years old)', middle: 'middle-aged', old: 'elderly' }
 
-export function scenePrompt(c: Character): string {
+const LIGHT: Record<TimeOfDay, string> = {
+  morning: 'Early morning: soft golden low sunlight, long gentle shadows, fresh air, calm sea.',
+  noon: 'Midday: bright high sun, short shadows, vivid blue sky and sea, shimmering heat.',
+  evening: 'Evening at sunset: warm orange and pink sky, long shadows, the first street lamps and lanterns lighting up.',
+  night: 'Night: dark blue sky with the moon and stars, warm yellow light from street lamps, windows and lanterns, the sea reflecting the lights.',
+}
+
+export function scenePrompt(c: Character, time?: TimeOfDay): string {
   return `${STYLE}
 Scene, first-person view (the viewer is not visible): ${c.name_el}, a ${AGE[c.age]} Greek ${c.gender === 'male' ? 'man' : 'woman'} — ${c.role_ru} — at ${c.place_el} (${c.place_ru}).
-${c.personality} The person is in the middle of the frame, looking towards the viewer in a friendly way, the place around them is clearly visible.`
+${c.personality} The person is in the middle of the frame, looking towards the viewer in a friendly way, the place around them is clearly visible.${time ? `\n${LIGHT[time]}` : ''}`
 }
 
 export class Timing {
@@ -91,13 +98,14 @@ export class SceneStore {
   }
 
   ensureAll(gameId: string, s: Scenario): Promise<void> {
+    const time = s.time_of_day
     const order = [s.start_id, ...s.characters.map((c) => c.id).filter((id) => id !== s.start_id)]
     const todo = order.filter((id) => !this.has(gameId, id) && !this.pending.has(`${gameId}/${id}`))
     if (this.enabled) todo.forEach((id) => this.queued.add(`${gameId}/${id}`))
-    return todo.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!)), Promise.resolve())
+    return todo.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!, time)), Promise.resolve())
   }
 
-  ensure(gameId: string, c: Character): Promise<void> {
+  ensure(gameId: string, c: Character, time?: TimeOfDay): Promise<void> {
     const key = `${gameId}/${c.id}`
     if (!this.enabled || this.has(gameId, c.id) || this.recentlyFailed(key)) {
       this.queued.delete(key)
@@ -109,7 +117,7 @@ export class SceneStore {
     const startedAt = Date.now()
     this.started.set(key, startedAt)
     const job = this.generator!
-      .generate(scenePrompt(c))
+      .generate(scenePrompt(c, time))
       .then((png) => {
         this.timing.record(Date.now() - startedAt)
         this.failed.delete(key)

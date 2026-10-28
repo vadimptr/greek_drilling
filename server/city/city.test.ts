@@ -450,3 +450,22 @@ test('story editor: a rejected draft is redrafted with the problems, at most a f
   assert.match(scenarioRequest('A2', [], ['The player is already in Μυθόπολη']), /rejected by the editor[\s\S]*already in Μυθόπολη/)
   assert.match(scenarioRequest('A2', []), /Postcards and letters go to the player's home country/)
 })
+
+test('time of day: from the player hour into the story, residents and scene lighting', async () => {
+  const { timeOfDay, scenarioRequest } = await import('./scenario.ts')
+  const { scenePrompt } = await import('./images.ts')
+  assert.deepEqual([5, 6, 11, 12, 16, 17, 20, 21, 0].map(timeOfDay), ['night', 'morning', 'morning', 'noon', 'noon', 'evening', 'evening', 'night', 'night'])
+  assert.match(scenarioRequest('A2', [], [], 'night'), /It is night[\s\S]*happens right now/)
+  assert.doesNotMatch(scenarioRequest('A2', []), /It is (morning|night)/)
+  const s = validateScenario(scenario())
+  assert.match(scenePrompt(s.characters[0], 'evening'), /sunset/)
+  assert.doesNotMatch(scenePrompt(s.characters[0]), /sunset|moon/)
+  let asked: string | undefined
+  const { call, login, opened, close } = await start({ scenarios: { generate: async (_l, _r, time) => { asked = time; const sc = validateScenario(scenario()); sc.time_of_day = time; return sc } } })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', { hour: 22 }, me)).body.game
+  assert.equal(asked, 'night')
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  assert.match(opened[0], /Time of day: night/)
+  await close()
+})

@@ -1,7 +1,7 @@
-import type { Level, Persona, Scenario } from './scenario.ts'
+import type { Level, Persona, Scenario, TimeOfDay } from './scenario.ts'
 
 export interface ScenarioGenerator {
-  generate(level: Level, recentGoals: string[]): Promise<Scenario>
+  generate(level: Level, recentGoals: string[], time?: TimeOfDay): Promise<Scenario>
 }
 
 export interface FactMatcher {

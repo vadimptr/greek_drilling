@@ -6,7 +6,7 @@ import { HttpError, readJson, send } from '../http.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
-import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood } from './scenario.ts'
+import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, timeOfDay, type Level, type Mood } from './scenario.ts'
 import {
   abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
   recordTalk, talksSince, type Game,
@@ -250,7 +250,8 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       const body = await readJson(req)
       const level = LEVELS.find((l) => l === body.level) ?? 'A2'
       const startedAt = Date.now()
-      const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id)).catch(providerFailure)
+      const hour = typeof body.hour === 'number' && body.hour >= 0 && body.hour < 24 ? Math.floor(body.hour) : null
+      const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), hour === null ? undefined : timeOfDay(hour)).catch(providerFailure)
       storyTiming.record(Date.now() - startedAt)
       abandonActive(db, u.id)
       const game = createGame(db, u.id, level, scenario)
@@ -308,7 +309,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
       recordTalk(db, game, characterId, deps.voice.id)
-      void deps.scenes?.ensure(game.id, character)
+      void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day)
       markMet(db, game, characterId)
       send(res, 200, { character: card(character), session, game: view(game) })
       return true
@@ -362,7 +363,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     }
 
     if (m[2] === 'scene') {
-      void deps.scenes?.ensure(game.id, character)
+      void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day)
       send(res, 200, { game: view(game) })
       return true
     }
