@@ -2,7 +2,16 @@ import Anthropic from '@anthropic-ai/sdk'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
 import { CITY_NAME, LOGIC_RULES, LORE, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario, type TimeOfDay } from './scenario.ts'
 
-const MODEL = 'claude-opus-5-5'
+const STORY_MODEL = process.env.CITY_STORY_MODEL || 'claude-opus-5-5'
+const HELPER_MODEL = process.env.CITY_HELPER_MODEL || 'claude-haiku-5-5'
+const WITH_FALLBACKS = /^claude-(opus|fable|sonnet)-/
+
+type CreateParams = Parameters<Anthropic['beta']['messages']['create']>[0]
+
+function ask(client: Anthropic, model: string, params: Omit<CreateParams, 'model' | 'betas' | 'fallbacks' | 'stream'>) {
+  const extra = WITH_FALLBACKS.test(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}
+  return client.beta.messages.create({ ...params, ...extra, model, stream: false })
+}
 const ATTEMPTS = 2
 
 const REVIEW_SCHEMA = {
@@ -37,11 +46,8 @@ export function claudeScenarios(apiKey: string): ScenarioGenerator {
   const client = new Anthropic({ apiKey, timeout: 90_000 })
 
   const once = async (level: Level, recentGoals: string[], problems: string[], time?: TimeOfDay): Promise<Scenario> => {
-    const response = await client.beta.messages.create({
-      model: MODEL,
+    const response = await ask(client, STORY_MODEL, {
       max_tokens: 16000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCENARIO_SCHEMA } },
       messages: [{ role: 'user', content: scenarioRequest(level, recentGoals, problems, time) }],
     })
@@ -52,11 +58,8 @@ export function claudeScenarios(apiKey: string): ScenarioGenerator {
   }
 
   const review = async (s: Scenario): Promise<Review> => {
-    const response = await client.beta.messages.create({
-      model: MODEL,
+    const response = await ask(client, HELPER_MODEL, {
       max_tokens: 4000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
       messages: [
         {
@@ -112,11 +115,8 @@ export function claudeFacts(apiKey: string): FactMatcher {
     async match(speaker, lines, facts) {
       const transcript = lines.map((l) => `${l.role === 'agent' ? speaker : 'Tourist'}: ${l.text}`).join('\n')
       const list = facts.map((f) => `- ${f.id}: ${f.text}`).join('\n')
-      const response = await client.beta.messages.create({
-        model: MODEL,
+      const response = await ask(client, HELPER_MODEL, {
         max_tokens: 4000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: MATCH_SCHEMA } },
         messages: [
           {
@@ -144,11 +144,8 @@ Which of these facts did ${speaker} actually communicate to the tourist in this 
 export function claudeTranslator(apiKey: string): Translator {
   const client = new Anthropic({ apiKey, timeout: 30_000 })
   const run = async (system: string, text: string) => {
-    const response = await client.beta.messages.create({
-      model: MODEL,
+    const response = await ask(client, HELPER_MODEL, {
       max_tokens: 2000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
       output_config: { effort: 'low' },
       system,
       messages: [{ role: 'user', content: text }],
@@ -192,11 +189,8 @@ export function claudeLevels(apiKey: string): LevelChecker {
   return {
     async check(level, lines) {
       const list = lines.map((l, i) => `${i}: ${l}`).join('\n')
-      const response = await client.beta.messages.create({
-        model: MODEL,
+      const response = await ask(client, HELPER_MODEL, {
         max_tokens: 6000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: LEVEL_SCHEMA } },
         messages: [
           {
