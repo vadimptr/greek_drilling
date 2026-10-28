@@ -7,7 +7,6 @@ import { Tip } from '../components/city/Tip'
 import { Translated } from '../components/city/Translated'
 import { Progress } from '../components/city/Progress'
 import { useAmbience } from '../logic/city/useAmbience'
-import { listenForVoice } from '../logic/city/listen'
 import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
@@ -22,7 +21,6 @@ interface Props {
   level: Level
   speed: number
   ambienceVolume: number
-  idleSeconds: number
   storyMs: number
   onSignIn: () => void
   onTotal: (total: number) => void
@@ -51,7 +49,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, speed, ambienceVolume, idleSeconds, storyMs, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -95,11 +93,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
   const pendingRef = useRef<string | null>(null)
   const walkAwayRef = useRef(false)
   const endingRef = useRef(false)
-  const pausingRef = useRef(false)
-  const lastActivityRef = useRef(0)
-  const meterRef = useRef(false)
-  const idleRef = useRef(idleSeconds)
-  idleRef.current = idleSeconds
+  const leavingRef = useRef(false)
   const lastSpokeRef = useRef<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const wonRef = useRef(false)
@@ -166,6 +160,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
 
   const leave = () => {
     window.clearTimeout(timerRef.current)
+    leavingRef.current = true
     void callRef.current?.end()
   }
 
@@ -198,12 +193,12 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       setNotice(`${who?.name ?? 'Собеседник'} не хочет больше с тобой разговаривать`)
     }
     endingRef.current = false
-    if (pausingRef.current && !wonRef.current && !target && !walkAwayRef.current) {
-      pausingRef.current = false
+    const dropped = !leavingRef.current && !walkAwayRef.current && !target && !wonRef.current
+    leavingRef.current = false
+    if (dropped) {
       setPhase('paused')
       return
     }
-    pausingRef.current = false
     lastSpokeRef.current = from
     currentRef.current = null
     setCharacter(null)
@@ -220,21 +215,13 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
   const handlers = (seq: number): VoiceHandlers => ({
     onLine: (role, text) => {
       if (seq !== callSeq.current || !text.trim()) return
-      lastActivityRef.current = Date.now()
       linesRef.current = [...linesRef.current, { role, text }]
       if (subsRef.current) void translateCached(text).catch(() => undefined)
       setLines(linesRef.current)
     },
-    onMeter: () => {
-      if (seq === callSeq.current) meterRef.current = true
-    },
-    onVoice: (score) => {
-      if (seq === callSeq.current && score > 0.6) lastActivityRef.current = Date.now()
-    },
     onMode: (mode) => {
       if (seq !== callSeq.current) return
       modeRef.current = mode
-      lastActivityRef.current = Date.now()
       setSpeaking(mode === 'speaking')
       if (!pendingRef.current && !walkAwayRef.current && !endingRef.current) return
       if (mode === 'speaking') window.clearTimeout(timerRef.current)
@@ -301,7 +288,6 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
         if (!drawn) setNotice('Картинку нарисовать не получилось — играем без неё')
       }
       setPhase('connecting')
-      meterRef.current = false
       const t = await talk(g.id, characterId, from, speedRef.current, resume)
       if (seq !== callSeq.current) return
       applyGame(t.game)
@@ -316,7 +302,6 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
         return
       }
       callRef.current = call
-      lastActivityRef.current = Date.now()
       setPhase('talking')
     } catch (e) {
       if (seq !== callSeq.current) return
@@ -376,7 +361,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     }
   }
 
-  const resumeTalk = (kind: 'voice' | 'tap') => {
+  const resumeTalk = (kind: 'tap') => {
     const g = gameRef.current
     const id = currentRef.current
     if (g && id) void connectTo(g, id, null, kind)
@@ -388,35 +373,6 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     setCharacter(null)
     setPhase('idle')
   }
-
-  useEffect(() => {
-    if (phase !== 'talking') return
-    const timer = window.setInterval(() => {
-      const idle = idleRef.current * 1000
-      if (!idle || !meterRef.current || modeRef.current !== 'listening' || pendingRef.current || endingRef.current || walkAwayRef.current || pausingRef.current) return
-      if (Date.now() - lastActivityRef.current > idle) {
-        pausingRef.current = true
-        leave()
-      }
-    }, 250)
-    return () => window.clearInterval(timer)
-  }, [phase])
-
-  useEffect(() => {
-    if (phase !== 'paused') return
-    let stop: (() => void) | null = null
-    let cancelled = false
-    listenForVoice(() => resumeTalk('voice'))
-      .then((s) => {
-        if (cancelled) s()
-        else stop = s
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-      stop?.()
-    }
-  }, [phase])
 
   const onMic = () => {
     if (phase === 'talking') {
@@ -562,7 +518,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
             {error && <span className="speak-bad">{error}</span>}
             {!error && phase === 'connecting' && 'Подхожу…'}
             {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
-            {!error && phase === 'paused' && '⏸ Пауза — заговори или нажми на микрофон'}
+            {!error && phase === 'paused' && '⏸ Ты долго молчал — нажми на микрофон, чтобы продолжить'}
             {!error && done && 'Задание выполнено — начни новое кнопкой или микрофоном'}
             {allowed === false && !signedIn && (
               <>

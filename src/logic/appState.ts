@@ -33,15 +33,12 @@ export interface AppState {
   grammarSub: GrammarSub
   citySpeed: number
   cityAmbience: number
-  cityIdle: number
 }
 
 export const CITY_SPEEDS = [0.7, 0.8, 0.9, 1, 1.1, 1.2]
 export const DEFAULT_CITY_SPEED = 0.9
 export const CITY_AMBIENCE_LEVELS = [0, 0.1, 0.2, 0.3, 0.5, 0.7, 1]
 export const DEFAULT_CITY_AMBIENCE = 0.3
-export const CITY_IDLE_SECONDS = [0, 2, 3, 5, 8, 12]
-export const DEFAULT_CITY_IDLE = 3
 
 export const APP_STORAGE_KEY = 'greek_drilling.v3'
 /** Предыдущий ключ: формат совместим, читается как есть, если v3 ещё не сохранялся. */
@@ -64,7 +61,6 @@ export function initialAppState(): AppState {
     grammarSub: 'lessons',
     citySpeed: DEFAULT_CITY_SPEED,
     cityAmbience: DEFAULT_CITY_AMBIENCE,
-    cityIdle: DEFAULT_CITY_IDLE,
   }
 }
 
@@ -158,7 +154,6 @@ export function deserializeApp(
     grammarSub: parsed.grammarSub === 'nouns' || parsed.grammarSub === 'aorist' ? parsed.grammarSub : 'lessons',
     citySpeed: CITY_SPEEDS.find((v) => v === parsed.citySpeed) ?? DEFAULT_CITY_SPEED,
     cityAmbience: CITY_AMBIENCE_LEVELS.find((v) => v === parsed.cityAmbience) ?? DEFAULT_CITY_AMBIENCE,
-    cityIdle: CITY_IDLE_SECONDS.find((v) => v === parsed.cityIdle) ?? DEFAULT_CITY_IDLE,
   }
 }
 
