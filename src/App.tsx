@@ -102,6 +102,7 @@ export default function App() {
       grammarSub: a.grammarSub,
       citySpeed: a.citySpeed,
       cityAmbience: a.cityAmbience,
+      cityIdle: a.cityIdle,
     }))
     setSettingsOpen(false)
   }
@@ -204,7 +205,7 @@ export default function App() {
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'city' && (
-          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} needsCode={cityNeedsCode} onUnlocked={() => setCityCheck((n) => n + 1)} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
+          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} needsCode={cityNeedsCode} onUnlocked={() => setCityCheck((n) => n + 1)} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} idleSeconds={app.cityIdle} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
         )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
@@ -230,6 +231,8 @@ export default function App() {
         onCitySpeed={(citySpeed) => setApp((a) => ({ ...a, citySpeed }))}
         cityAmbience={app.cityAmbience}
         onCityAmbience={(cityAmbience) => setApp((a) => ({ ...a, cityAmbience }))}
+        cityIdle={app.cityIdle}
+        onCityIdle={(cityIdle) => setApp((a) => ({ ...a, cityIdle }))}
         onDirection={changeDirection}
         onAutoSpeak={changeAutoSpeak}
         onLevel={changeLevel}

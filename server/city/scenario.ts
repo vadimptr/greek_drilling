@@ -258,7 +258,10 @@ export function card(c: Character): CharacterCard {
 
 const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
+export type Resume = 'voice' | 'tap'
+
 export interface Meeting {
+  resume?: Resume
   levelNotes?: string[]
   met: string[]
   cameFrom: string | null
@@ -281,7 +284,7 @@ const MOOD_EN: Record<Mood, string> = {
 }
 
 export function buildPersona(s: Scenario, characterId: string, level: Level, meeting: Meeting): Persona {
-  const { met, cameFrom, mood, previous, levelNotes = [] } = meeting
+  const { met, cameFrom, mood, previous, levelNotes = [], resume } = meeting
   const c = s.characters.find((x) => x.id === characterId)
   if (!c) throw new Error(`unknown character ${characterId}`)
   const byId = (id: string) => s.characters.find((x) => x.id === id)!
@@ -303,13 +306,24 @@ As soon as the tourist has actually obtained or found out all of that from you, 
   const history = [
     metNames.length ? `The tourist has already talked to: ${metNames.join(', ')}.` : 'This is the first person the tourist talks to in town.',
     cameFrom ? `They have just come to you after talking to ${byId(cameFrom).name_el}.` : '',
-    again ? 'You have already talked to this tourist earlier today; they are coming back to you.' : '',
+    resume
+      ? 'You are in the middle of a conversation with this tourist; there was just a short pause. Continue naturally from where you stopped, do not greet again.'
+      : again
+        ? 'You have already talked to this tourist earlier today; they are coming back to you.'
+        : '',
   ].filter(Boolean).join(' ')
   const earlier = previous.length
     ? `\nYour earlier conversation with this tourist (most recent lines):\n${previous.map((l) => `${l.role === 'agent' ? 'You' : 'Tourist'}: ${l.text}`).join('\n')}\n`
     : ''
   const greetings = REGREETING[mood]
-  const firstMessage = again || mood !== 'friendly' ? greetings[Math.floor(Math.random() * greetings.length)] : c.greeting_el
+  const firstMessage =
+    resume === 'voice'
+      ? 'Συγγνώμη, δεν σε άκουσα. Τι είπες;'
+      : resume === 'tap'
+        ? 'Ναι;'
+        : again || mood !== 'friendly'
+          ? greetings[Math.floor(Math.random() * greetings.length)]
+          : c.greeting_el
 
   const systemPrompt = `You are ${c.name_el}, a ${AGE_EN[c.age]} ${c.gender === 'male' ? 'man' : 'woman'} living in ${CITY_NAME}: ${c.role_ru}.
 Right now you are at: ${c.place_el}.

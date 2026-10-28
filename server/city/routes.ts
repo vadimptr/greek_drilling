@@ -349,7 +349,9 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
       if (game.status !== 'active') throw new HttpError(409, 'Задание уже выполнено')
       if (!deps.voice) throw new HttpError(503, 'Голосовой сервис не настроен')
       if (!reachable(game).has(characterId)) throw new HttpError(409, 'Ты ещё не знаешь, где найти этого жителя')
-      if (talksSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= deps.dailyTalks) {
+      const resume = body.resume === 'voice' || body.resume === 'tap' ? body.resume : undefined
+      if (resume && !game.met.includes(characterId)) throw new HttpError(409, 'С этим жителем ты ещё не говорил')
+      if (!resume && talksSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= deps.dailyTalks) {
         throw new HttpError(429, 'На сегодня разговоров достаточно, город отдыхает до завтра')
       }
       const from = typeof body.from === 'string' && game.met.includes(body.from) ? body.from : null
@@ -359,10 +361,11 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
         mood: game.moods[characterId] ?? 'friendly',
         previous: linesFor(db, game, characterId, 16),
         levelNotes: recentLevelNotes(db, game, 6),
+        resume,
       })
       if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
-      recordTalk(db, game, characterId, deps.voice.id)
+      if (!resume) recordTalk(db, game, characterId, deps.voice.id)
       void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day)
       markMet(db, game, characterId)
       send(res, 200, { character: card(character), session, game: view(game) })

@@ -130,8 +130,8 @@ export const leaderboard = () => call<{ boards: Board[] }>('GET', '/api/city/lea
 export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/city/games/current').then((r) => r.game)
 export const newGame = (level: Level) =>
   call<{ game: CityGame }>('POST', '/api/city/games', { level, hour: new Date().getHours() }).then((r) => r.game)
-export const talk = (gameId: string, characterId: string, from: string | null, speed: number) =>
-  call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed })
+export const talk = (gameId: string, characterId: string, from: string | null, speed: number, resume?: 'voice' | 'tap') =>
+  call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed, resume })
 export interface LevelCheck {
   level: string
   total: number

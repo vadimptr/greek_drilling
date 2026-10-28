@@ -495,3 +495,22 @@ test('access code: listed accounts with a code unlock the city once; wrong codes
   assert.equal((await call('POST', '/api/city/unlock', { code: 'K7Q2-ZP9M' }, me)).status, 429)
   await close()
 })
+
+test('resuming after a silence pause continues the same talk without counting it', async () => {
+  const { call, login, opened, close } = await start({ dailyTalks: 1 })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', {}, me)).body.game
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'voice' }, me)).status, 409)
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)).status, 200)
+  const back = await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'voice' }, me)
+  assert.equal(back.status, 200)
+  assert.equal((back.body.session.connection as { token: string }).token, 't')
+  assert.match(opened[1], /short pause\. Continue naturally/)
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'tap' }, me)).status, 200)
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)).status, 429)
+  const { buildPersona } = await import('./scenario.ts')
+  const s = validateScenario(scenario())
+  assert.equal(buildPersona(s, 'eleni', 'A1', { met: ['eleni'], cameFrom: null, mood: 'friendly', previous: [], resume: 'voice' }).firstMessage, 'Συγγνώμη, δεν σε άκουσα. Τι είπες;')
+  assert.equal(buildPersona(s, 'eleni', 'A1', { met: ['eleni'], cameFrom: null, mood: 'friendly', previous: [], resume: 'tap' }).firstMessage, 'Ναι;')
+  await close()
+})

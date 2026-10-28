@@ -21,6 +21,7 @@ export const connect: VoiceConnector = async (connection, h) => {
     },
     onMessage: ({ message, role }) => h.onLine(role === 'user' ? 'user' : 'agent', stripAudioTags(message).replace(/\s{2,}/g, ' ').trim()),
     onModeChange: ({ mode }) => h.onMode(mode),
+    onVadScore: ({ vadScore }) => h.onVoice?.(vadScore),
     onDisconnect: () => h.onEnd(),
     onError: (message) => h.onError(message),
   })
