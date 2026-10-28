@@ -356,6 +356,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
     return () => window.clearInterval(timer)
   }, [waitingScene, game?.id])
 
+  const done = allowed === true && game?.status === 'won' && (phase === 'won' || phase === 'idle')
   const busy = phase === 'loading' || phase === 'generating' || phase === 'painting' || phase === 'connecting' || phase === 'walking'
   const active = game && game.status === 'active'
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
@@ -402,8 +403,15 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
             {phase === 'painting' && (!sceneState || sceneState.state === 'none') && <div className="city-hint city-hint-small">🎨 Готовлю сцену…</div>}
             {phase !== 'generating' && sceneState?.state === 'queued' && <div className="city-hint city-hint-small">🎨 Сцена в очереди на отрисовку</div>}
             {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
-            {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
-            {phase === 'idle' && !character && (
+            {done && (
+              <div className="city-won-card">
+                <div className="city-won">Задание выполнено! 🎉</div>
+                <button className="primary-btn" onClick={() => void startNew()}>
+                  Новое задание
+                </button>
+              </div>
+            )}
+            {phase === 'idle' && !character && !done && (
               <div className="city-hint">
                 {!allowed
                   ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
@@ -445,7 +453,7 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
             {!error && notice && phase === 'idle' && <span className="speak-bad">{notice}</span>}
             {!error && phase === 'connecting' && 'Подхожу…'}
             {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
-            {!error && phase === 'won' && 'Нажми на микрофон — будет новое задание'}
+            {!error && done && 'Задание выполнено — начни новое кнопкой или микрофоном'}
             {allowed === false && !signedIn && (
               <>
                 Разговоры с жителями доступны по приглашению.{' '}
@@ -490,6 +498,11 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
               {phase === 'idle' && active && (
                 <button className="secondary-btn" onClick={() => void startNew()}>
                   Другое задание
+                </button>
+              )}
+              {done && (
+                <button className="secondary-btn" onClick={() => void startNew()}>
+                  Новое задание
                 </button>
               )}
             </div>

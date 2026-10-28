@@ -637,6 +637,8 @@
 .pc-track { height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--text) 10%, transparent); margin: 10px 0 6px; overflow: hidden; }
 .pc-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #38bdf8); transition: width 0.25s linear; }
 .pc-eta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.city-won-card { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.city-won-card .primary-btn { padding: 12px 28px; font-size: 16px; }
 .city-won { font-size: 30px; font-weight: 800; color: var(--ok); background: color-mix(in srgb, var(--bg) 80%, transparent); padding: 10px 22px; border-radius: 18px; animation: pulse 0.45s ease; }
 
 .city-bottom { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 0 6% 4px; }
