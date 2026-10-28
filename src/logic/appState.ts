@@ -9,7 +9,7 @@ import { initialSpellState, type SpellState } from './spell'
 import { initialState as initialWords, type RoundState } from './state'
 import { deserialize as deserializeWords, STORAGE_KEY as WORDS_V1_KEY } from './storage'
 
-export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell'
+export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell' | 'city'
 
 /** Что показывать в разделе «Речь»: греческое слово с переводом или только перевод. */
 export type SpeakHint = 'el' | 'ru'
@@ -128,7 +128,7 @@ export function deserializeApp(
   if (!isObj(parsed)) return initialAppState()
 
   const tab: Tab =
-    parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' || parsed.tab === 'spell'
+    parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' || parsed.tab === 'spell' || parsed.tab === 'city'
       ? parsed.tab
       : 'words'
   return {

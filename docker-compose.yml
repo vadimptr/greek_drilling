@@ -14,6 +14,13 @@ services:
     image: ghcr.io/vadimptr/greek_drilling/api:latest
     environment:
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required in .env}
+      CITY_ALLOWED_USERS: ${CITY_ALLOWED_USERS:-}
+      CITY_DAILY_TALKS: ${CITY_DAILY_TALKS:-40}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_AGENT_ID: ${ELEVENLABS_AGENT_ID:-agent_5001m6153pjwfjf84269kkmrz7a6}
+      ELEVENLABS_VOICES: ${ELEVENLABS_VOICES:-}
+      ELEVENLABS_SPEED: ${ELEVENLABS_SPEED:-0.9}
     volumes:
       - data:/data
     restart: unless-stopped

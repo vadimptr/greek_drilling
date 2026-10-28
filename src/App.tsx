@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { lessonsUpTo } from './data/grammar'
 import { wordPool } from './data/levels'
@@ -22,6 +22,8 @@ import { AoristScreen } from './screens/AoristScreen'
 import { AORIST_VERBS } from './data/aorist'
 import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
+import { CityScreen } from './screens/CityScreen'
+import { cityAccess } from './logic/city/api'
 
 const speechAvailable = canSpeak()
 
@@ -32,13 +34,30 @@ export default function App() {
     const loaded = boot.app
     // ?tab=grammar|mock|words|speak|spell — открыть нужную вкладку по ссылке
     const param = new URLSearchParams(window.location.search).get('tab')
-    const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock']
+    const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock', 'city']
     const tab = tabs.find((t) => t === param) ?? null
     return tab ? { ...loaded, tab } : loaded
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const account = useAccount(app, setApp, boot.user)
+  const [city, setCity] = useState<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    let alive = true
+    if (!account.user) {
+      setCity(null)
+      return
+    }
+    cityAccess().then((r) => alive && setCity(r.allowed ? r.city : null))
+    return () => {
+      alive = false
+    }
+  }, [account.user])
+
+  useEffect(() => {
+    if (city === null && app.tab === 'city') setApp((a) => ({ ...a, tab: 'words' }))
+  }, [city, app.tab])
 
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
@@ -106,6 +125,11 @@ export default function App() {
     const weak = pool.filter((w) => w.id in app.spell.weak).length
     subtitle = `${level} · написано ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
+  } else if (app.tab === 'city') {
+    left = { icon: '🌊', value: city ?? '…', label: 'Город' }
+    right = { icon: '🗣️', value: level, label: 'Уровень' }
+    subtitle = `${city ?? ''} · жители говорят на уровне ${level}`
+    progress = null
   } else {
     const history = app.mock.history.filter((a) => variantLevel(a.variantId) === level)
     const passed = history.filter((a) => a.passed).length
@@ -149,10 +173,11 @@ export default function App() {
         {app.tab === 'spell' && (
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
+        {app.tab === 'city' && city && <CityScreen city={city} level={level} />}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
-      <TabBar tab={app.tab} onChange={setTab} />
+      <TabBar tab={app.tab} city={city ?? null} onChange={setTab} />
 
       <AccountSheet
         open={accountOpen}

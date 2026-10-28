@@ -14,7 +14,8 @@ FROM node:24-alpine AS api
 
 WORKDIR /app
 
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY server ./server
 COPY src/logic/name.ts ./src/logic/name.ts
 

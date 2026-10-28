@@ -24,7 +24,8 @@
 /* tab bar */
 .tabbar {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   border-top: 1px solid var(--border);
   background: var(--card);
   padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
@@ -44,6 +45,7 @@
   border-radius: 12px;
 }
 .tab-icon { font-size: 20px; }
+.tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tab-active { color: var(--accent); font-weight: 600; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 
 .link-btn {
@@ -522,6 +524,30 @@
 }
 .speak-actions { display: flex; gap: 10px; width: 100%; }
 .speak-actions .secondary-btn, .speak-actions .primary-btn { flex: 1; }
+
+/* city section */
+.city-scene { gap: 10px; }
+.city-hint { font-size: 18px; color: var(--muted); line-height: 1.4; padding: 0 12px; }
+.city-name { font-size: clamp(28px, 8vw, 38px); font-weight: 700; transition: color 0.2s; }
+.city-name-speaking { color: var(--accent); }
+.city-won { font-size: 26px; font-weight: 700; color: var(--ok); animation: pulse 0.45s ease; }
+.city-goal {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: left;
+}
+.city-goal-done { border-color: var(--ok); text-decoration: line-through; text-decoration-color: var(--ok); }
+.city-subs { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 8px; text-align: left; }
+.city-line { font-size: 15px; line-height: 1.35; padding: 6px 10px; border-radius: 12px; background: var(--card); align-self: flex-start; max-width: 90%; }
+.city-line-me { align-self: flex-end; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.city-people { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
+.city-people .secondary-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px; }
+.city-people-role { font-size: 12px; color: var(--muted); font-weight: 400; }
 
 /* spell section */
 .spell {

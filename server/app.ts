@@ -3,53 +3,10 @@ import type { DatabaseSync } from 'node:sqlite'
 import { nameError } from '../src/logic/name.ts'
 import { createUser, findUser, readProgress, userById, writeProgress, type UserRow } from './db.ts'
 import { COOKIE, issue, MAX_AGE, readCookie, verify } from './session.ts'
+import { HttpError, readJson, send } from './http.ts'
+import { createCity, type CityDeps } from './city/routes.ts'
 
-const MAX_BODY = 256 * 1024
 const ENTERS_PER_MINUTE = 30
-
-class HttpError extends Error {
-  status: number
-  extra?: Record<string, unknown>
-  constructor(status: number, message: string, extra?: Record<string, unknown>) {
-    super(message)
-    this.status = status
-    this.extra = extra
-  }
-}
-
-function send(res: ServerResponse, status: number, body?: unknown, headers: Record<string, string> = {}): void {
-  if (body === undefined) {
-    res.writeHead(status, { 'Cache-Control': 'no-store', ...headers })
-    res.end()
-    return
-  }
-  const data = JSON.stringify(body)
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    'Content-Length': Buffer.byteLength(data),
-    ...headers,
-  })
-  res.end(data)
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = []
-  let size = 0
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length
-    if (size > MAX_BODY) throw new HttpError(413, 'Слишком большой запрос')
-    chunks.push(chunk as Buffer)
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  } catch {
-    throw new HttpError(400, 'Тело запроса — не JSON')
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new HttpError(400, 'Ожидается объект')
-  return parsed as Record<string, unknown>
-}
 
 function isHttps(req: IncomingMessage): boolean {
   return req.headers['x-forwarded-proto'] === 'https'
@@ -59,7 +16,8 @@ function sessionCookie(req: IncomingMessage, value: string, maxAge: number): str
   return `${COOKIE}=${value}; Path=/api; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${isHttps(req) ? '; Secure' : ''}`
 }
 
-export function createApp(db: DatabaseSync, secret: string) {
+export function createApp(db: DatabaseSync, secret: string, cityDeps?: CityDeps) {
+  const city = cityDeps ? createCity(db, cityDeps) : null
   const enters = new Map<string, number[]>()
   const limitEnters = (req: IncomingMessage) => {
     const ip = (req.headers['x-real-ip'] as string | undefined) ?? req.socket.remoteAddress ?? '?'
@@ -121,8 +79,11 @@ export function createApp(db: DatabaseSync, secret: string) {
     const path = (req.url ?? '/').split('?')[0]
     const handler = routes[`${req.method} ${path}`]
     try {
-      if (!handler) throw new HttpError(404, 'Не найдено')
-      await handler(req, res)
+      if (handler) {
+        await handler(req, res)
+      } else if (!(city && (await city(req, res, path, currentUser(req))))) {
+        throw new HttpError(404, 'Не найдено')
+      }
     } catch (e) {
       if (e instanceof HttpError) {
         send(res, e.status, { error: e.message, ...e.extra })
