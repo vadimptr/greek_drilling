@@ -168,7 +168,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     throw new HttpError(502, e instanceof ProviderError ? 'Сервис ИИ сейчас недоступен, попробуй ещё раз' : 'Ошибка сервиса ИИ')
   }
 
-  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|complete)$/
+  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|scene|complete)$/
 
   const translations = new Map<string, string>()
   const translate = async (text: string): Promise<string> => {
@@ -351,6 +351,12 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
           : Promise.resolve(null)
       const [, check] = await Promise.all([matching, checking])
       send(res, 200, { game: view(game), check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) } })
+      return true
+    }
+
+    if (m[2] === 'scene') {
+      void deps.scenes?.ensure(game.id, character)
+      send(res, 200, { game: view(game) })
       return true
     }
 

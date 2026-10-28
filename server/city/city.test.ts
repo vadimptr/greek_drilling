@@ -279,6 +279,8 @@ test('scene images are generated in the background, served to the owner and list
   const again = (await call('GET', '/api/city/games/current', undefined, me)).body.game
   assert.equal(again.characters[0].scene, `/api/city/games/${game.id}/scenes/eleni`)
   assert.equal((await call('GET', `/api/city/games/${game.id}/scenes/nobody`, undefined, me)).status, 404)
+  const asked = (await call('POST', `/api/city/games/${game.id}/scene`, { characterId: 'kostas' }, me)).body.game
+  assert.equal(asked.characters.find((c: { id: string }) => c.id === 'kostas').sceneState.state, 'ready')
   await close()
 })
 

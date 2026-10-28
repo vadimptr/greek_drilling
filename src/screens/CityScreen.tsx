@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, newGame, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, newGame, requestScene, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
@@ -10,7 +10,7 @@ import { CITY_NAME } from '../logic/city/name'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
 
-type Phase = 'loading' | 'idle' | 'generating' | 'connecting' | 'talking' | 'walking' | 'won'
+type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'talking' | 'walking' | 'won'
 
 interface Props {
   allowed: boolean | null
@@ -27,6 +27,9 @@ const LEAVE_AFTER_SPEECH_MS = 900
 const LEAVE_IF_SILENT_MS = 2500
 const WALK_MS = 1200
 const FRESH_MS = 4000
+const SCENE_POLL_MS = 2000
+const SCENE_WAIT_MS = 180_000
+const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms))
 
 function readSubs(): boolean {
   try {
@@ -56,6 +59,7 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
   speedRef.current = speed
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const [storyStartedAt, setStoryStartedAt] = useState(0)
+  const [paintingId, setPaintingId] = useState<string | null>(null)
   const [levelCheck, setLevelCheck] = useState<{ who: string; check: LevelCheck } | null>(null)
   const [gameAt, setGameAt] = useState(() => Date.now())
   const freshTimer = useRef<number | undefined>(undefined)
@@ -235,9 +239,16 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
     setError(null)
     setNotice(null)
     setLevelCheck(null)
-    setPhase('connecting')
     const seq = ++callSeq.current
     try {
+      if (g.scenesEnabled && !g.characters.find((c) => c.id === characterId)?.scene) {
+        setPhase('painting')
+        setPaintingId(characterId)
+        await waitScene(g, characterId, seq)
+        setPaintingId(null)
+        if (seq !== callSeq.current) return
+      }
+      setPhase('connecting')
       const t = await talk(g.id, characterId, from, speedRef.current)
       if (seq !== callSeq.current) return
       applyGame(t.game)
@@ -257,6 +268,23 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
       if (seq !== callSeq.current) return
       setError(errorText(e))
       setPhase('idle')
+    }
+  }
+
+  const waitScene = async (g: CityGame, characterId: string, seq: number) => {
+    const until = Date.now() + SCENE_WAIT_MS
+    let fresh = await requestScene(g.id, characterId).catch(() => null)
+    let missing = 0
+    while (Date.now() < until && seq === callSeq.current) {
+      if (fresh && fresh.id === g.id) {
+        applyIfCurrent(fresh)
+        const c = fresh.characters.find((x) => x.id === characterId)
+        if (!fresh.scenesEnabled || c?.scene) return
+        missing = c?.sceneState?.state === 'none' ? missing + 1 : 0
+        if (missing >= 3) return
+      }
+      await sleep(SCENE_POLL_MS)
+      fresh = await currentGame().catch(() => null)
     }
   }
 
@@ -326,12 +354,12 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
     return () => window.clearInterval(timer)
   }, [waitingScene, game?.id])
 
-  const busy = phase === 'loading' || phase === 'generating' || phase === 'connecting' || phase === 'walking'
+  const busy = phase === 'loading' || phase === 'generating' || phase === 'painting' || phase === 'connecting' || phase === 'walking'
   const active = game && game.status === 'active'
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
 
   const sceneOf = (id: string | null | undefined) => (id ? (game?.characters.find((c) => c.id === id)?.scene ?? null) : null)
-  const shownId = character?.id ?? (active ? game?.startId : null)
+  const shownId = phase === 'painting' ? paintingId : (character?.id ?? (active ? game?.startId : null))
   const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
   const sceneState = phase === 'generating' || phase === 'walking' || scene ? null : game?.characters.find((c) => c.id === shownId)?.sceneState
   const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'idle')
@@ -360,8 +388,13 @@ export function CityScreen({ allowed, signedIn, level, speed, storyMs, onSignIn,
           <div className="city-overlay">
             {phase === 'generating' && <Progress label="Придумываю историю…" startedAt={storyStartedAt} expectedMs={storyMs} />}
             {phase !== 'generating' && sceneState?.state === 'drawing' && (
-              <Progress label="Рисую сцену…" startedAt={gameAt - sceneState.elapsedMs} expectedMs={sceneState.expectedMs} />
+              <Progress
+                label={phase === 'painting' ? 'Рисую сцену, потом начнём разговор…' : 'Рисую сцену…'}
+                startedAt={gameAt - sceneState.elapsedMs}
+                expectedMs={sceneState.expectedMs}
+              />
             )}
+            {phase === 'painting' && (!sceneState || sceneState.state === 'none') && <div className="city-hint city-hint-small">🎨 Готовлю сцену…</div>}
             {phase !== 'generating' && sceneState?.state === 'queued' && <div className="city-hint city-hint-small">🎨 Сцена в очереди на отрисовку</div>}
             {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
             {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
