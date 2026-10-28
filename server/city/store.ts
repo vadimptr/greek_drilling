@@ -61,6 +61,11 @@ export function migrateCity(db: DatabaseSync): void {
       issues TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS city_story_log (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS city_lines (
       id INTEGER PRIMARY KEY,
       game_id TEXT NOT NULL REFERENCES city_games(id) ON DELETE CASCADE,
@@ -211,4 +216,13 @@ export function recentLevelNotes(db: DatabaseSync, game: Game, limit: number): s
   const rows = db.prepare('SELECT issues FROM city_level_checks WHERE game_id = ? ORDER BY id DESC LIMIT 3').all(game.id) as { issues: string }[]
   const notes = rows.flatMap((r) => (JSON.parse(r.issues) as LevelCheck['issues']).map((i) => i.note))
   return [...new Set(notes)].slice(0, limit)
+}
+
+export function recordStory(db: DatabaseSync, userId: number): void {
+  db.prepare('INSERT INTO city_story_log (user_id, created_at) VALUES (?, ?)').run(userId, now())
+}
+
+export function storiesSince(db: DatabaseSync, userId: number, since: Date): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM city_story_log WHERE user_id = ? AND created_at >= ?').get(userId, since.toISOString()) as { n: number }
+  return row.n
 }

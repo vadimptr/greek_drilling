@@ -65,6 +65,8 @@ export default function App() {
   const [cityAllowed, setCityAllowed] = useState<boolean | null>(null)
   const [cityTotal, setCityTotal] = useState(0)
   const [storyMs, setStoryMs] = useState(40_000)
+  const [cityNeedsCode, setCityNeedsCode] = useState(false)
+  const [cityCheck, setCityCheck] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -76,13 +78,14 @@ export default function App() {
     cityAccess().then((r) => {
       if (!alive) return
       setCityAllowed(r.allowed)
+      setCityNeedsCode(r.needsCode)
       setCityTotal(r.total)
       setStoryMs(r.storyMs)
     })
     return () => {
       alive = false
     }
-  }, [account.user])
+  }, [account.user, cityCheck])
 
   const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
@@ -201,7 +204,7 @@ export default function App() {
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'city' && (
-          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
+          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} needsCode={cityNeedsCode} onUnlocked={() => setCityCheck((n) => n + 1)} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
         )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>

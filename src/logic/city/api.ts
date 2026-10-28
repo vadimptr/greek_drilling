@@ -102,13 +102,15 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return data as T
 }
 
-export async function cityAccess(): Promise<{ allowed: boolean; total: number; storyMs: number }> {
+export async function cityAccess(): Promise<{ allowed: boolean; needsCode: boolean; total: number; storyMs: number }> {
   try {
     return await call('GET', '/api/city')
   } catch {
-    return { allowed: false, total: 0, storyMs: 40_000 }
+    return { allowed: false, needsCode: false, total: 0, storyMs: 40_000 }
   }
 }
+
+export const unlockCity = (code: string) => call<void>('POST', '/api/city/unlock', { code })
 
 export interface BoardRow {
   rank: number

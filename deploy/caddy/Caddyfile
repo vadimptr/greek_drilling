@@ -17,6 +17,6 @@ https://languagedrilling.com:9094 {
 		resolvers 1.1.1.1 1.0.0.1
 	}
 	encode gzip
-	# сайт greek_drilling из соседнего compose, опубликован на хосте на 9093
-	reverse_proxy host.docker.internal:9093
+	# сайт greek_drilling из соседнего compose, через общую docker-сеть infra (порт на хосте не публикуется)
+	reverse_proxy greek_drilling-greek-drilling-1:80
 }

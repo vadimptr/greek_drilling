@@ -17,7 +17,7 @@ function sessionCookie(req: IncomingMessage, value: string, maxAge: number): str
 }
 
 export function createApp(db: DatabaseSync, secret: string, cityDeps?: CityDeps) {
-  const city = cityDeps ? createCity(db, cityDeps) : null
+  const city = cityDeps ? createCity(db, cityDeps, secret) : null
   const enters = new Map<string, number[]>()
   const limitEnters = (req: IncomingMessage) => {
     const ip = (req.headers['x-real-ip'] as string | undefined) ?? req.socket.remoteAddress ?? '?'

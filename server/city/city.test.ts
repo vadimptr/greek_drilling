@@ -76,7 +76,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
 
 test('city is visible only to allowed users', async () => {
   const { call, login, close } = await start()
-  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, city: 'Μυθόπολη', total: 0, storyMs: 40000 })
+  assert.deepEqual((await call('GET', '/api/city')).body, { allowed: false, needsCode: false, city: 'Μυθόπολη', total: 0, storyMs: 40000 })
   const guest = await login('Guest')
   assert.equal((await call('GET', '/api/city', undefined, guest)).body.allowed, false)
   assert.equal((await call('POST', '/api/city/games', {}, guest)).status, 403)
@@ -467,5 +467,31 @@ test('time of day: from the player hour into the story, residents and scene ligh
   assert.equal(asked, 'night')
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
   assert.match(opened[0], /Time of day: night/)
+  await close()
+})
+
+test('access code: listed accounts with a code unlock the city once; wrong codes are limited; story limit', async () => {
+  const { call, login, close } = await start({ allowedUsers: ['Vadim:K7Q2-ZP9M', 'Open'], dailyStories: 2 })
+  const me = await login('Vadim')
+  const locked = (await call('GET', '/api/city', undefined, me)).body
+  assert.equal(locked.allowed, false)
+  assert.equal(locked.needsCode, true)
+  assert.equal((await call('POST', '/api/city/games', {}, me)).status, 403)
+  assert.equal((await call('POST', '/api/city/unlock', { code: 'nope' }, me)).status, 403)
+  const ok = await call('POST', '/api/city/unlock', { code: ' k7q2-zp9m ' }, me)
+  assert.equal(ok.status, 204)
+  assert.match(ok.cookie, /^gd_city=/)
+  const both = `${me}; ${ok.cookie}`
+  assert.equal((await call('GET', '/api/city', undefined, both)).body.allowed, true)
+  assert.equal((await call('POST', '/api/city/games', {}, both)).status, 201)
+  assert.equal((await call('POST', '/api/city/games', {}, both)).status, 201)
+  assert.equal((await call('POST', '/api/city/games', {}, both)).status, 429)
+  const stranger = await login('Guest')
+  assert.equal((await call('POST', '/api/city/unlock', { code: 'K7Q2-ZP9M' }, stranger)).status, 403)
+  assert.equal((await call('GET', '/api/city', undefined, `${stranger}; ${ok.cookie}`)).body.allowed, false)
+  const open = await login('Open')
+  assert.equal((await call('GET', '/api/city', undefined, open)).body.allowed, true)
+  for (let i = 0; i < 6; i++) await call('POST', '/api/city/unlock', { code: 'x' }, me)
+  assert.equal((await call('POST', '/api/city/unlock', { code: 'K7Q2-ZP9M' }, me)).status, 429)
   await close()
 })

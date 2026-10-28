@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, introduce, newGame, requestScene, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
+  completeGame, currentGame, introduce, newGame, requestScene, unlockCity, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
@@ -16,6 +16,8 @@ type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'ta
 interface Props {
   allowed: boolean | null
   signedIn: boolean
+  needsCode: boolean
+  onUnlocked: () => void
   level: Level
   speed: number
   ambienceVolume: number
@@ -47,7 +49,7 @@ function errorText(e: unknown): string {
   return 'Не получилось начать разговор, попробуй ещё раз'
 }
 
-export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -62,6 +64,23 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
   const [fresh, setFresh] = useState<Set<string>>(new Set())
   const [storyStartedAt, setStoryStartedAt] = useState(0)
   const [paintingId, setPaintingId] = useState<string | null>(null)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
+
+  const submitCode = async () => {
+    if (!code.trim() || unlocking) return
+    setUnlocking(true)
+    setCodeError(null)
+    try {
+      await unlockCity(code)
+      onUnlocked()
+    } catch (e) {
+      setCodeError(e instanceof CityError ? e.message : 'Не получилось проверить код')
+    } finally {
+      setUnlocking(false)
+    }
+  }
   const [levelCheck, setLevelCheck] = useState<{ who: string; check: LevelCheck } | null>(null)
   const [gameAt, setGameAt] = useState(() => Date.now())
   const freshTimer = useRef<number | undefined>(undefined)
@@ -481,7 +500,30 @@ export function CityScreen({ allowed, signedIn, level, speed, ambienceVolume, st
                 </button>
               </>
             )}
-            {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
+            {allowed === false && signedIn && !needsCode && 'Разговоры с жителями пока доступны только по приглашению'}
+          {allowed === false && signedIn && needsCode && (
+            <form
+              className="city-code"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void submitCode()
+              }}
+            >
+              <span>Введи код доступа к городу:</span>
+              <input
+                className="account-input city-code-input"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="XXXX-XXXX"
+                autoComplete="one-time-code"
+                aria-label="Код доступа"
+              />
+              <button className="primary-btn" type="submit" disabled={unlocking || !code.trim()}>
+                Открыть
+              </button>
+              {codeError && <span className="speak-bad">{codeError}</span>}
+            </form>
+          )}
           </div>
           {levelCheck && phase === 'idle' && (
             <Tip

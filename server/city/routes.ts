@@ -3,18 +3,21 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
+import { issue, readCookie, verify } from '../session.ts'
+import { timingSafeEqual } from 'node:crypto'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceOf, type AmbienceStore } from './ambience.ts'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, timeOfDay, type Level, type Mood } from './scenario.ts'
 import {
   abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
-  recordTalk, talksSince, type Game,
+  recordStory, recordTalk, storiesSince, talksSince, type Game,
 } from './store.ts'
 
 export interface CityDeps {
   allowedUsers: string[]
   dailyTalks: number
+  dailyStories?: number
   scenarios: ScenarioGenerator | null
   facts: FactMatcher | null
   translator: Translator | null
@@ -135,14 +138,40 @@ export function leaderboard(games: Game[], userId: number, nameOf: (id: number) 
   return CATEGORIES.map(board)
 }
 
-export function createCity(db: DatabaseSync, deps: CityDeps) {
-  migrateCity(db)
-  const allowed = new Set(deps.allowedUsers.map(nameKey))
-  const isAllowed = (user: UserRow | undefined) => !!user && allowed.has(nameKey(user.name))
+export const CITY_COOKIE = 'gd_city'
+const UNLOCK_MAX_AGE = 180 * 24 * 60 * 60
+const UNLOCK_ATTEMPTS = 6
+const UNLOCK_WINDOW_MS = 10 * 60_000
 
-  const requireAllowed = (user: UserRow | undefined): UserRow => {
+export function parseAccess(entries: string[]): Map<string, string> {
+  const access = new Map<string, string>()
+  for (const entry of entries) {
+    const at = entry.indexOf(':')
+    const name = (at < 0 ? entry : entry.slice(0, at)).trim()
+    if (name) access.set(nameKey(name), at < 0 ? '' : entry.slice(at + 1).trim())
+  }
+  return access
+}
+
+const sameCode = (a: string, b: string) => {
+  const x = Buffer.from(a.trim().toUpperCase())
+  const y = Buffer.from(b.trim().toUpperCase())
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
+  migrateCity(db)
+  const access = parseAccess(deps.allowedUsers)
+  const citySecret = `${secret}:city`
+  const listed = (user: UserRow | undefined) => !!user && access.has(nameKey(user.name))
+  const needsCode = (user: UserRow) => !!access.get(nameKey(user.name))
+  const isAllowed = (user: UserRow | undefined, req: IncomingMessage) =>
+    !!user && listed(user) && (!needsCode(user) || verify(citySecret, readCookie(req.headers.cookie, CITY_COOKIE)) === user.id)
+  const attempts = new Map<number, number[]>()
+
+  const requireAllowed = (user: UserRow | undefined, req: IncomingMessage): UserRow => {
     if (!user) throw new HttpError(401, 'Нужно войти')
-    if (!isAllowed(user)) throw new HttpError(403, 'Город пока закрыт для этого аккаунта')
+    if (!isAllowed(user, req)) throw new HttpError(403, listed(user) ? 'Нужен код доступа к городу' : 'Город пока закрыт для этого аккаунта')
     return user
   }
 
@@ -203,16 +232,37 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
 
     if (method === 'GET' && path === '/api/city') {
       send(res, 200, {
-        allowed: isAllowed(user),
+        allowed: isAllowed(user, req),
+        needsCode: !!user && listed(user) && !isAllowed(user, req),
         city: CITY_NAME,
-        total: isAllowed(user) ? totalScore(user!.id) : 0,
+        total: isAllowed(user, req) ? totalScore(user!.id) : 0,
         storyMs: storyTiming.ms,
       })
       return true
     }
 
+    if (method === 'POST' && path === '/api/city/unlock') {
+      if (!user) throw new HttpError(401, 'Нужно войти')
+      if (!listed(user)) throw new HttpError(403, 'Город пока закрыт для этого аккаунта')
+      const now = Date.now()
+      const recent = (attempts.get(user.id) ?? []).filter((t) => now - t < UNLOCK_WINDOW_MS)
+      if (recent.length >= UNLOCK_ATTEMPTS) throw new HttpError(429, 'Слишком много попыток, подожди 10 минут')
+      recent.push(now)
+      attempts.set(user.id, recent)
+      const body = await readJson(req)
+      const code = typeof body.code === 'string' ? body.code : ''
+      const expected = access.get(nameKey(user.name)) ?? ''
+      if (expected && !sameCode(code, expected)) throw new HttpError(403, 'Неверный код')
+      attempts.delete(user.id)
+      const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : ''
+      send(res, 204, undefined, {
+        'Set-Cookie': `${CITY_COOKIE}=${issue(citySecret, user.id)}; Path=/api; HttpOnly; SameSite=Lax; Max-Age=${UNLOCK_MAX_AGE}${secure}`,
+      })
+      return true
+    }
+
     if (method === 'GET' && path === '/api/city/leaderboard') {
-      const u = requireAllowed(user)
+      const u = requireAllowed(user, req)
       const names = new Map<number, string>()
       const nameOf = (id: number) => {
         if (!names.has(id)) names.set(id, (db.prepare('SELECT name FROM users WHERE id = ?').get(id) as { name: string } | undefined)?.name ?? '')
@@ -223,7 +273,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     }
 
     if (method === 'GET' && path === '/api/city/games/current') {
-      const u = requireAllowed(user)
+      const u = requireAllowed(user, req)
       const game = currentGame(db, u.id)
       if (game) {
         await ensureGreek(game)
@@ -235,7 +285,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     }
 
     if (method === 'POST' && path === '/api/city/translate') {
-      requireAllowed(user)
+      requireAllowed(user, req)
       if (!deps.translator) throw new HttpError(503, 'Перевод не настроен')
       const body = await readJson(req)
       const text = typeof body.text === 'string' ? body.text.trim().slice(0, MAX_TRANSLATE) : ''
@@ -245,16 +295,20 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
     }
 
     if (method === 'POST' && path === '/api/city/games') {
-      const u = requireAllowed(user)
+      const u = requireAllowed(user, req)
       if (!deps.scenarios) throw new HttpError(503, 'Генератор сценариев не настроен')
       const body = await readJson(req)
       const level = LEVELS.find((l) => l === body.level) ?? 'A2'
+      if (storiesSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= (deps.dailyStories ?? 15)) {
+        throw new HttpError(429, 'На сегодня новых историй достаточно, приходи завтра')
+      }
       const startedAt = Date.now()
       const hour = typeof body.hour === 'number' && body.hour >= 0 && body.hour < 24 ? Math.floor(body.hour) : null
       const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id), hour === null ? undefined : timeOfDay(hour)).catch(providerFailure)
       storyTiming.record(Date.now() - startedAt)
       abandonActive(db, u.id)
       const game = createGame(db, u.id, level, scenario)
+      recordStory(db, u.id)
       void deps.scenes?.ensureAll(game.id, scenario)
       void deps.ambience?.ensureMany(scenario.characters.map(ambienceOf))
       send(res, 201, { game: view(game) })
@@ -263,7 +317,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
 
     const am = /^\/api\/city\/ambience\/([a-z_]{1,20})$/.exec(path)
     if (method === 'GET' && am) {
-      requireAllowed(user)
+      requireAllowed(user, req)
       const mp3 = deps.ambience?.read(am[1])
       if (!mp3) throw new HttpError(404, 'Звука пока нет')
       res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Content-Length': mp3.length, 'Cache-Control': 'private, max-age=604800' })
@@ -273,7 +327,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
 
     const sm = sceneRoute.exec(path)
     if (method === 'GET' && sm) {
-      const u = requireAllowed(user)
+      const u = requireAllowed(user, req)
       const game = loadGame(u, sm[1])
       const png = deps.scenes?.read(game.id, sm[2])
       if (!png) throw new HttpError(404, 'Картинки пока нет')
@@ -284,7 +338,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
 
     const m = gameRoute.exec(path)
     if (method !== 'POST' || !m) return false
-    const u = requireAllowed(user)
+    const u = requireAllowed(user, req)
     const game = loadGame(u, m[1])
     const body = await readJson(req)
     const characterId = typeof body.characterId === 'string' ? body.characterId : ''
