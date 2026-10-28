@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type TouristNotes, type ScenarioGenerator, type Translator } from './providers.ts'
 import { SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario } from './scenario.ts'
 
 const MODEL = 'claude-opus-5-5'
@@ -158,6 +158,46 @@ List only the replies that are clearly too difficult for ${level} or break the r
       const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
       const parsed = JSON.parse(text) as { issues?: { index: number; reason_ru: string; note_en: string }[] }
       return (parsed.issues ?? []).filter((x) => Number.isInteger(x.index) && x.index >= 0 && x.index < lines.length)
+    },
+  }
+}
+
+const NOTES_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['notes'],
+  properties: { notes: { type: 'array', items: { type: 'string' } } },
+} as const
+
+export function claudeTouristNotes(apiKey: string): TouristNotes {
+  const client = new Anthropic({ apiKey, timeout: 60_000 })
+  return {
+    async extract(lines, known) {
+      const transcript = lines.map((l) => `${l.role === 'agent' ? 'Resident' : 'Tourist'}: ${l.text}`).join('\n')
+      const response = await client.beta.messages.create({
+        model: MODEL,
+        max_tokens: 2000,
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: NOTES_SCHEMA } },
+        messages: [
+          {
+            role: 'user',
+            content: `A spoken conversation in Greek between a tourist and a resident of a small town (speech recognition may contain errors):
+
+${transcript}
+
+Already known about the tourist:
+${known.length ? known.map((k) => `- ${k}`).join('\n') : '- nothing'}
+
+List NEW facts the tourist clearly said about themselves (name, where they are from, job, why they came, how long they stay, family, likes...). Short English notes like "Name: Vadim", "From Saint Petersburg, Russia". Skip anything uncertain or already known. Return an empty list if nothing new.`,
+          },
+        ],
+      })
+      if (response.stop_reason === 'refusal') return []
+      const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
+      const parsed = JSON.parse(text) as { notes?: unknown }
+      return Array.isArray(parsed.notes) ? parsed.notes.filter((n): n is string => typeof n === 'string' && n.length < 200).slice(0, 8) : []
     },
   }
 }

@@ -167,7 +167,7 @@ Rules:
 - In all Russian texts the town is «городок» or «Мифополи», never «деревня».
 - goal_el: the same task in Greek, at level ${level}, short and clear ("Μάθε…", "Αγόρασε…").
 - goal_check: in English, what exactly the player must have obtained or found out for the goal to count as done (concrete facts, numbers, items).
-- 3 to 5 characters. Greek names. ids are short lowercase latin slugs (e.g. "yiannis").
+- 3 to 5 characters, all adults (at least 20 years old; "young" means 20-30): no children or teenagers. Greek names. ids are short lowercase latin slugs (e.g. "yiannis").
 - start_id: the character the player meets first. It must NOT be the solver: a passer-by, a relative or a friend of the solver, standing somewhere relevant.
 - solver_id: the only character who can fully complete the goal.
 - The solver must be reachable from the start through refers_to links in at most 3 steps. Others may be dead ends or give partial hints.
@@ -233,6 +233,7 @@ const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old
 
 export interface Meeting {
   levelNotes?: string[]
+  aboutTourist?: string[]
   met: string[]
   cameFrom: string | null
   mood: Mood
@@ -254,7 +255,7 @@ const MOOD_EN: Record<Mood, string> = {
 }
 
 export function buildPersona(s: Scenario, characterId: string, level: Level, meeting: Meeting): Persona {
-  const { met, cameFrom, mood, previous, levelNotes = [] } = meeting
+  const { met, cameFrom, mood, previous, levelNotes = [], aboutTourist = [] } = meeting
   const c = s.characters.find((x) => x.id === characterId)
   if (!c) throw new Error(`unknown character ${characterId}`)
   const byId = (id: string) => s.characters.find((x) => x.id === id)!
@@ -295,13 +296,14 @@ You are talking face to face with a tourist who has just arrived by ferry and is
 ${history}
 ${earlier}
 Your mood towards the tourist right now: ${MOOD_EN[mood]}.
-${levelNotes.length ? `\nLast time some of your phrases were too difficult for the tourist's level. Avoid this:\n${levelNotes.map((n) => `- ${n}`).join('\n')}\n` : ''}
+${aboutTourist.length ? `\nWhat you already know about the tourist (news travels fast in a small town) — don't ask about it again, you may mention it:\n${aboutTourist.map((n) => `- ${n}`).join('\n')}\n` : ''}${levelNotes.length ? `\nLast time some of your phrases were too difficult for the tourist's level. Avoid this:\n${levelNotes.map((n) => `- ${n}`).join('\n')}\n` : ''}
 Language rules (most important):
 - Speak ONLY Greek. Never switch to Russian, English or any other language, even if asked; if the tourist does not understand, rephrase in simpler Greek or speak slower.
 - Level rules — follow them in every single reply, even when you are emotional:
 ${LEVEL_STYLE[level]}
 - Always address the tourist informally with «εσύ» (σου, σε), never «εσείς» or «σας».
 - Ask the tourist questions back sometimes.
+- Never repeat yourself: don't say again a sentence you already said and don't ask a question you already asked or that the tourist already answered. React to what the tourist just said and move the conversation forward. If the tourist's words were unclear, ask a short different question («Συγγνώμη;», «Τι εννοείς;») instead of repeating your previous line.
 - If the tourist makes a mistake, do not lecture; just answer naturally, using the correct form yourself.
 
 What you know: ${c.knows}

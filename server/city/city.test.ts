@@ -325,7 +325,7 @@ test('old games without Greek goal get it filled in once on load', async () => {
 test('leaderboard ranks players per category, hides other names, keeps you visible', () => {
   const s = validateScenario(scenario())
   const g = (userId: number, found: string[], won: boolean): Game => ({
-    id: `g${userId}${found.join('')}`, userId, level: 'A2', scenario: s, met: [], found, heard: [], moods: {}, reasons: {}, status: won ? 'won' : 'active',
+    id: `g${userId}${found.join('')}`, userId, level: 'A2', scenario: s, met: [], found, heard: [], moods: {}, reasons: {}, tourist: [], status: won ? 'won' : 'active',
   })
   const games = [g(1, ['f2'], false), g(2, ['f5', 'f6'], true), g(3, ['f2', 'f4'], true), g(3, [], true)]
   const boards = leaderboard(games, 1, (id) => `user${id}`)
@@ -408,4 +408,23 @@ test('scene failures are reported and pause generation on billing errors', async
   await broke.ensure('g', s.characters[0])
   assert.equal(broke.enabled, false)
   assert.deepEqual(broke.status('g', 'kostas'), { state: 'failed' })
+})
+
+test('what the tourist told about themselves reaches the next residents, also in the next story', async () => {
+  const { call, login, opened, close } = await start({
+    facts: null,
+    tourist: { extract: async (lines, known) => (lines.some((l) => /Βαδίμ/.test(l.text)) && !known.length ? ['Name: Vadim', 'From Saint Petersburg'] : []) },
+  })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', {}, me)).body.game
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  assert.doesNotMatch(opened[0], /already know about the tourist/)
+  await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [{ role: 'user', text: 'Με λένε Βαδίμ, είμαι από την Αγία Πετρούπολη' }] }, me)
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
+  assert.match(opened[1], /already know about the tourist[\s\S]*Name: Vadim[\s\S]*Saint Petersburg/)
+  assert.match(opened[1], /Never repeat yourself/)
+  const next = (await call('POST', '/api/city/games', {}, me)).body.game
+  await call('POST', `/api/city/games/${next.id}/talk`, { characterId: 'eleni' }, me)
+  assert.match(opened[2], /Name: Vadim/)
+  await close()
 })

@@ -11,7 +11,7 @@ export interface ImageGenerator {
 const STYLE = `Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition. Absolutely no text, letters, signs, boat names or captions anywhere in the image.
 Setting: a small fictional harbour town on the Aegean coast of Greece — whitewashed houses with blue doors and shutters, bougainvillea, stone lanes, fishing boats (kaikia), the sea always nearby.`
 
-const AGE: Record<Character['age'], string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
+const AGE: Record<Character['age'], string> = { young: 'young adult (25 years old)', middle: 'middle-aged', old: 'elderly' }
 
 export function scenePrompt(c: Character): string {
   return `${STYLE}
