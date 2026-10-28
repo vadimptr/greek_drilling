@@ -466,7 +466,8 @@ test('time of day: from the player hour into the story, residents and scene ligh
   const game = (await call('POST', '/api/city/games', { hour: 22 }, me)).body.game
   assert.ok(['morning', 'noon', 'evening', 'night'].includes(String(asked)))
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  assert.match(opened[0], new RegExp(`Time of day: ${asked}`))
+  const { TIME_EN } = await import('./scenario.ts')
+  assert.ok(opened[0].includes(`Time of day: ${TIME_EN[asked as keyof typeof TIME_EN]}`))
   await close()
 })
 
