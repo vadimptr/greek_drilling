@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { lessonsUpTo } from './data/grammar'
 import { wordPool } from './data/levels'
@@ -24,7 +24,8 @@ import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 import { CityScreen } from './screens/CityScreen'
 import { cityAccess } from './logic/city/api'
-import { CITY_NAME, CITY_PATH } from './logic/city/name'
+import { CITY_NAME } from './logic/city/name'
+import { parseRoute, pathFor } from './logic/route'
 
 const speechAvailable = canSpeak()
 
@@ -33,16 +34,31 @@ const boot = initialLoad()
 export default function App() {
   const [app, setApp] = useState<AppState>(() => {
     const loaded = boot.app
-    // ?tab=grammar|mock|words|speak|spell — открыть нужную вкладку по ссылке
-    if (window.location.pathname === CITY_PATH) {
-      window.history.replaceState(null, '', '/' + window.location.hash)
-      return { ...loaded, tab: 'city' }
-    }
-    const param = new URLSearchParams(window.location.search).get('tab')
-    const tabs: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock', 'city']
-    const tab = tabs.find((t) => t === param) ?? null
-    return tab ? { ...loaded, tab } : loaded
+    const route = parseRoute(window.location.pathname, window.location.search)
+    return route ? { ...loaded, tab: route.tab, grammarSub: route.sub ?? loaded.grammarSub } : loaded
   })
+  const routed = useRef(false)
+
+  useEffect(() => {
+    const want = pathFor(app.tab, app.grammarSub)
+    if (window.location.pathname === want && !window.location.search) {
+      routed.current = true
+      return
+    }
+    const url = want + window.location.hash
+    if (routed.current) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+    routed.current = true
+  }, [app.tab, app.grammarSub])
+
+  useEffect(() => {
+    const onPop = () => {
+      const route = parseRoute(window.location.pathname, window.location.search)
+      if (route) setApp((a) => ({ ...a, tab: route.tab, grammarSub: route.sub ?? a.grammarSub }))
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
   const account = useAccount(app, setApp, boot.user)
