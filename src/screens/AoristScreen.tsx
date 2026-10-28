@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AORIST_VERBS, PRONOUNS, type AoristVerb } from '../data/aorist'
+import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristVerb } from '../data/aorist'
 import { AORIST_THEORY } from '../data/aorist/theory'
-import { AORIST_WORDS, aoristVerb, makeAoristTask, paradigm, type AoristTask } from '../logic/aorist'
+import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, sentencesOf, verbsOf, type AoristTask, type GroupFilter } from '../logic/aorist'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
 import { initialSpeakState, type SpeakState } from '../logic/speakState'
@@ -25,8 +25,32 @@ interface Props {
   onChange: (next: SpeakState) => void
 }
 
-function nextTask(state: SpeakState): AoristTask | null {
-  const word = pickNext(state, AORIST_WORDS)
+const GROUP_KEY = 'greek_drilling.aoristGroup'
+
+const FILTERS: { id: GroupFilter; label: string }[] = [{ id: 'all', label: 'Все' }, ...AORIST_GROUPS.map((g) => ({ id: g.id, label: g.label }))]
+
+function loadFilter(): GroupFilter {
+  try {
+    const v = localStorage.getItem(GROUP_KEY)
+    return FILTERS.some((f) => f.id === v) ? (v as GroupFilter) : 'all'
+  } catch {
+    return 'all'
+  }
+}
+
+function saveFilter(f: GroupFilter) {
+  try {
+    localStorage.setItem(GROUP_KEY, f)
+  } catch {
+    return
+  }
+}
+
+const groupTitle = (g: AoristVerb['group']) => AORIST_GROUPS.find((x) => x.id === g)!.title
+const groupLabel = (g: AoristVerb['group']) => AORIST_GROUPS.find((x) => x.id === g)!.label
+
+function nextTask(state: SpeakState, filter: GroupFilter): AoristTask | null {
+  const word = pickNext(state, aoristWords(filter))
   const verb = word ? aoristVerb(word.id) : undefined
   return verb ? makeAoristTask(verb) : null
 }
@@ -35,6 +59,12 @@ const hasProgress = (s: SpeakState) => s.learned.length > 0 || Object.keys(s.wea
 
 export function AoristScreen({ state, onChange }: Props) {
   const [view, setView] = useState<View>(() => (hasProgress(state) ? 'train' : 'theory'))
+  const [filter, setFilter] = useState<GroupFilter>(loadFilter)
+
+  const changeFilter = (f: GroupFilter) => {
+    setFilter(f)
+    saveFilter(f)
+  }
 
   useEffect(() => {
     document.querySelector('.screen')?.scrollTo({ top: 0 })
@@ -50,8 +80,9 @@ export function AoristScreen({ state, onChange }: Props) {
         ))}
       </div>
       {view === 'theory' && <Theory onTrain={() => setView('train')} />}
-      {view === 'verbs' && <VerbList state={state} />}
-      {view === 'train' && <Trainer state={state} onChange={onChange} />}
+      {view !== 'theory' && <GroupPicker filter={filter} onChange={changeFilter} />}
+      {view === 'verbs' && <VerbList state={state} filter={filter} />}
+      {view === 'train' && <Trainer key={filter} state={state} onChange={onChange} filter={filter} />}
     </div>
   )
 }
@@ -77,26 +108,50 @@ function Theory({ onTrain }: { onTrain: () => void }) {
   )
 }
 
-function VerbList({ state }: { state: SpeakState }) {
+function GroupPicker({ filter, onChange }: { filter: GroupFilter; onChange: (f: GroupFilter) => void }) {
+  return (
+    <div className="aorist-groups">
+      {FILTERS.map((f) => (
+        <button key={f.id} className={f.id === filter ? 'aorist-group aorist-group-active' : 'aorist-group'} onClick={() => onChange(f.id)}>
+          {f.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function VerbList({ state, filter }: { state: SpeakState; filter: GroupFilter }) {
   const [open, setOpen] = useState<number | null>(null)
   const learned = new Set(state.learned)
+  const groups = AORIST_GROUPS.filter((g) => filter === 'all' || g.id === filter)
   return (
     <main className="aorist-verbs">
       <p className="sec-text">Нажми на глагол, чтобы увидеть все формы. ✓ — усвоен, ● — на повторении.</p>
-      {AORIST_VERBS.map((v) => (
-        <VerbRow
-          key={v.id}
-          verb={v}
-          mark={v.id in state.weak ? 'weak' : learned.has(v.id) ? 'learned' : null}
-          open={open === v.id}
-          onToggle={() => setOpen(open === v.id ? null : v.id)}
-        />
-      ))}
+      {groups.map((g) => {
+        const verbs = verbsOf(g.id)
+        return (
+          <section key={g.id} className="aorist-verbs">
+            <h2 className="aorist-chapter-title">
+              {g.title} · {verbs.length}
+            </h2>
+            {verbs.map((v) => (
+              <VerbRow
+                key={v.id}
+                verb={v}
+                mark={v.id in state.weak ? 'weak' : learned.has(v.id) ? 'learned' : null}
+                open={open === v.id}
+                onToggle={() => setOpen(open === v.id ? null : v.id)}
+              />
+            ))}
+          </section>
+        )
+      })}
     </main>
   )
 }
 
 function VerbRow({ verb, mark, open, onToggle }: { verb: AoristVerb; mark: 'weak' | 'learned' | null; open: boolean; onToggle: () => void }) {
+  const sentences = open ? sentencesOf(verb.id) : []
   return (
     <div className={open ? 'verb-row verb-row-open' : 'verb-row'}>
       <button className="verb-row-head" onClick={onToggle} aria-expanded={open}>
@@ -128,12 +183,23 @@ function VerbRow({ verb, mark, open, onToggle }: { verb: AoristVerb; mark: 'weak
           </tbody>
         </table>
       )}
+      {sentences.length > 0 && (
+        <ul className="verb-examples">
+          {sentences.map((s, i) => (
+            <li key={i}>
+              <span className="verb-example-el">{fillBlank(s, verb.forms[s.p])}</span>
+              <span className="verb-row-ru">{s.ru}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
-function Trainer({ state, onChange }: Props) {
-  const [task, setTask] = useState<AoristTask | null>(() => nextTask(state))
+function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
+  const words = aoristWords(filter)
+  const [task, setTask] = useState<AoristTask | null>(() => nextTask(state, filter))
   const [picked, setPicked] = useState<string | null>(null)
   const timer = useRef<number | null>(null)
 
@@ -145,13 +211,16 @@ function Trainer({ state, onChange }: Props) {
   )
 
   useEffect(() => {
-    if (task === null && !isWin(state, AORIST_WORDS)) setTask(nextTask(state))
-  }, [state, task])
+    if (task === null && !isWin(state, words)) setTask(nextTask(state, filter))
+  }, [state, task, words, filter])
 
-  const advance = useCallback((next: SpeakState) => {
-    setPicked(null)
-    setTask(nextTask(next))
-  }, [])
+  const advance = useCallback(
+    (next: SpeakState) => {
+      setPicked(null)
+      setTask(nextTask(next, filter))
+    },
+    [filter],
+  )
 
   const choose = (o: string) => {
     if (!task || picked !== null) return
@@ -159,7 +228,7 @@ function Trainer({ state, onChange }: Props) {
     const correct = o === task.answer
     const next = applyAnswer(state, task.verb.id, correct)
     onChange(next)
-    if (speechAvailable) speak(task.reveal.split(' — ')[0])
+    if (speechAvailable) speak(task.form)
     if (correct) {
       timer.current = window.setTimeout(() => {
         timer.current = null
@@ -174,36 +243,35 @@ function Trainer({ state, onChange }: Props) {
     advance(next)
   }
 
-  const won = isWin(state, AORIST_WORDS)
-  if (!task) return <main className="nouns">{won && <WinOverlay total={AORIST_WORDS.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
+  const won = isWin(state, words)
+  if (!task) return <main className="nouns">{won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
 
   const answered = picked !== null
   const correct = picked === task.answer
   const cardClass = !answered ? 'nouns-card' : correct ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
-  const isSentence = task.kind === 'sentence-person' || task.kind === 'sentence-verb'
 
   return (
     <main className="nouns">
-      <div key={`${task.verb.id}-${task.kind}-${task.prompt}-${answered ? (correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
-        <div className={isSentence ? 'aorist-sentence' : 'nouns-form'}>{answered && isSentence ? task.reveal : task.prompt}</div>
-        <div className="spell-ru">{task.hint}</div>
-        <div className="spell-task">
-          {answered && correct && <span className="speak-ok">✓ {task.reveal}</span>}
-          {answered && !correct && (
-            <span className="spell-answer">
-              <span className="speak-bad">✗</span> Правильно: <span className="spell-correct">{task.answer}</span>
-            </span>
-          )}
+      <div key={`${task.verb.id}-${task.person}-${answered ? (correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
+        <div className="aorist-meta">
+          <span className="aorist-badge">{groupLabel(task.verb.group)}</span>
+          <span>
+            {PRONOUNS[task.person]} · {PRONOUN_RU[task.person]}
+          </span>
         </div>
-        {answered && !correct && (
+        <div className="nouns-form">{task.form}</div>
+        <div className="spell-ru">{answered ? `${task.verb.present} — ${task.verb.ru}` : 'Как переводится глагол?'}</div>
+        {answered && (
           <div className="aorist-paradigm">
-            {task.verb.present}: {paradigm(task.verb)}
+            {groupTitle(task.verb.group)}
+            <br />
+            {paradigm(task.verb)}
           </div>
         )}
       </div>
 
       <div className="spell-bottom">
-        <div className="options">
+        <div className="options options-6">
           {task.options.map((o) => (
             <button
               key={o}
@@ -226,7 +294,7 @@ function Trainer({ state, onChange }: Props) {
         )}
       </div>
 
-      {won && !answered && <WinOverlay total={AORIST_WORDS.length} bestStreak={state.bestStreak} onRestart={restart} />}
+      {won && !answered && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}
     </main>
   )
 }

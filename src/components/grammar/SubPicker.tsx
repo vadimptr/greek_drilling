@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { lessonsUpTo } from '../../data/grammar'
+import { AORIST_VERBS } from '../../data/aorist'
 import type { GrammarSub } from '../../logic/appState'
 import { LEVELS, type Level } from '../../types/word'
 
@@ -20,7 +21,7 @@ const SUBS: Sub[] = [
     minLevel: 'A1',
   },
   { id: 'nouns', title: 'Склонение', description: () => 'Род, падеж и число существительных', icon: '🔠', minLevel: 'A1' },
-  { id: 'aorist', title: 'Аорист', description: () => 'Прошедшее время: правила и 38 главных глаголов', icon: '⏪', minLevel: 'A2' },
+  { id: 'aorist', title: 'Аорист', description: () => `Прошедшее время: правила и ${AORIST_VERBS.length} глаголов`, icon: '⏪', minLevel: 'A2' },
 ]
 
 export function subsFor(level: Level): Sub[] {
