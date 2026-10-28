@@ -149,7 +149,13 @@ const LEVEL_STYLE: Record<Level, string> = {
   - Avoid rare words, idioms and dialect; rephrase if the tourist does not understand.`,
 }
 
-export function scenarioRequest(level: Level, recentGoals: string[]): string {
+export const LOGIC_RULES = `- The player is already in ${CITY_NAME}, walking around town. The quest happens here and now: never ask to send, bring or deliver something to ${CITY_NAME}, never ask to "come to" or "find" ${CITY_NAME} itself, never require leaving town. Postcards and letters go to the player's home country, not to ${CITY_NAME}.
+- Everything must be physically possible today in a small town: places from the town description (or ordinary small-town places), realistic prices in euros and opening hours, things a local could really know or sell.
+- The solver must really be able to give or tell what the goal needs; the goal must be completable just by talking to the characters.
+- Facts, prices, times, names and places are the same in every character's knows and facts; nobody contradicts anybody; the goal facts together cover the whole goal_check.
+- goal_ru and goal_el say the same thing; nothing in the goal is ambiguous or impossible.`
+
+export function scenarioRequest(level: Level, recentGoals: string[], problems: string[] = []): string {
   const recent = recentGoals.length
     ? `\nRecent goals of this player (make the new one clearly different):\n${recentGoals.map((g) => `- ${g}`).join('\n')}`
     : ''
@@ -161,6 +167,9 @@ Invent one small everyday quest that the player completes only by talking to peo
 - go to the harbour and find out from a fisherman what he caught today, what he sells and for how much;
 - find out from Mrs Papadopoulou where her granddaughter Maria lives and what she does.
 Invent a new one in this spirit, with concrete details the player has to find out or obtain.
+
+Logic (most important):
+${LOGIC_RULES}
 
 Rules:
 - goal_ru: the task for the player in Russian, 1-2 sentences, imperative ("Узнай…", "Купи…"). Name the person by role or name but do not explain where to find them.
@@ -187,7 +196,9 @@ Facts (the player collects them for points while talking):
 - known_by: ids of the characters who can tell this fact. The character the fact is about knows it automatically; add others when they would plausibly know it (a niece knows her uncle studied in Athens). Spread clues: other characters should know some facts about the solver.
 - text_ru: the fact as it will appear in the player's notebook, in Russian, 2-8 words, without the person's name ("учился в университете Салоник", "лодка выходит в 6:00"). text_en: the same fact in English, with full detail, for the actor.
 - For every refers_to link, the referring character must know at least one fact about that person (who they are or where to find them), so the player can learn about them.
-- Facts must not contradict knows, personality or each other.${recent}`
+- Facts must not contradict knows, personality or each other.${recent}${
+    problems.length ? `\n\nA previous draft was rejected by the editor for these problems — make sure none of them happens again:\n${problems.map((p) => `- ${p}`).join('\n')}` : ''
+  }`
 }
 
 export function validateScenario(raw: unknown): Scenario {

@@ -429,3 +429,24 @@ test('residents remember only their own talk within one story, nobody remembers 
   assert.doesNotMatch(opened[3], /already talked to this tourist/)
   await close()
 })
+
+test('story editor: a rejected draft is redrafted with the problems, at most a few rounds', async () => {
+  const { draftAndReview } = await import('./claude.ts')
+  const { scenarioRequest } = await import('./scenario.ts')
+  const seen: string[][] = []
+  const drafts = [scenario(), scenario(), scenario()]
+  drafts[0].goal_ru = 'Отправь открытку в Мифополи'
+  let n = 0
+  const result = await draftAndReview(
+    async (problems) => { seen.push(problems); return drafts[n++] },
+    async (s) => (s.goal_ru.includes('открытку') ? { ok: false, problems: ['The player is already in Μυθόπολη'] } : { ok: true, problems: [] }),
+    3,
+  )
+  assert.equal(result, drafts[1])
+  assert.deepEqual(seen, [[], ['The player is already in Μυθόπολη']])
+  let rounds = 0
+  await draftAndReview(async () => { rounds++; return scenario() }, async () => ({ ok: false, problems: ['x'] }), 3)
+  assert.equal(rounds, 3)
+  assert.match(scenarioRequest('A2', [], ['The player is already in Μυθόπολη']), /rejected by the editor[\s\S]*already in Μυθόπολη/)
+  assert.match(scenarioRequest('A2', []), /Postcards and letters go to the player's home country/)
+})
