@@ -3,7 +3,7 @@ import { createApp } from './app.ts'
 import { claudeFacts, claudeScenarios, claudeTranslator } from './city/claude.ts'
 import { elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
-import { elevenLabsImages, SceneStore } from './city/images.ts'
+import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
 import { openDb } from './db.ts'
 import { dirname, join } from 'node:path'
 
@@ -32,9 +32,14 @@ const city = {
 }
 
 const dataDir = dirname(env.DB_PATH ?? 'data/gd.db')
-const images = env.CITY_IMAGES === 'elevenlabs' && env.ELEVENLABS_API_KEY
-  ? elevenLabsImages(env.ELEVENLABS_API_KEY, env.CITY_IMAGE_MODEL ?? 'gemini-3.1-flash-image')
-  : null
+const images =
+  env.CITY_IMAGES === 'openai' && env.OPENAI_API_KEY
+    ? openAiImages(env.OPENAI_API_KEY, env.CITY_IMAGE_MODEL || 'gpt-image-1')
+    : env.CITY_IMAGES === 'google' && env.GOOGLE_API_KEY
+    ? googleImages(env.GOOGLE_API_KEY, env.CITY_IMAGE_MODEL || 'gemini-2.5-flash-image')
+    : env.CITY_IMAGES === 'elevenlabs' && env.ELEVENLABS_API_KEY
+      ? elevenLabsImages(env.ELEVENLABS_API_KEY, env.CITY_IMAGE_MODEL || 'gemini-3.1-flash-image')
+      : null
 const scenes = new SceneStore(join(dataDir, 'city-scenes'), images)
 
 const port = Number(env.PORT ?? 3000)

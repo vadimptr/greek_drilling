@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
-import type { SceneStore } from './images.ts'
+import { imageType, type SceneStore } from './images.ts'
 import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
@@ -193,7 +193,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       const game = loadGame(u, sm[1])
       const png = deps.scenes?.read(game.id, sm[2])
       if (!png) throw new HttpError(404, 'Картинки пока нет')
-      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'private, max-age=86400' })
+      res.writeHead(200, { 'Content-Type': imageType(png), 'Content-Length': png.length, 'Cache-Control': 'private, max-age=86400' })
       res.end(png)
       return true
     }

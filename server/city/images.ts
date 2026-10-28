@@ -21,7 +21,7 @@ ${c.personality} The person is in the middle of the frame, looking towards the v
 
 export class SceneStore {
   private pending = new Map<string, Promise<void>>()
-  private disabled = false
+  private pausedUntil = 0
   private dir: string
   private generator: ImageGenerator | null
 
@@ -31,7 +31,7 @@ export class SceneStore {
   }
 
   get enabled(): boolean {
-    return !!this.generator && !this.disabled
+    return !!this.generator && Date.now() >= this.pausedUntil
   }
 
   private path(gameId: string, characterId: string): string {
@@ -64,7 +64,7 @@ export class SceneStore {
         writeFileSync(this.path(gameId, c.id), png)
       })
       .catch((e) => {
-        if (e instanceof ProviderError && /paid_plan_required|402/.test(e.message)) this.disabled = true
+        if (e instanceof ProviderError && /\b(402|429)\b|paid_plan_required|quota/i.test(e.message)) this.pausedUntil = Date.now() + 15 * 60_000
         console.error(`scene ${key}:`, e instanceof Error ? e.message : e)
       })
       .finally(() => this.pending.delete(key))
@@ -98,6 +98,53 @@ export function elevenLabsImages(apiKey: string, model: string, fetchImpl: typeo
         }
       }
       throw new ProviderError('elevenlabs image: timeout')
+    },
+  }
+}
+
+export function imageType(bytes: Buffer): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg'
+  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') return 'image/webp'
+  return 'image/png'
+}
+
+export function googleImages(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): ImageGenerator {
+  return {
+    id: 'google',
+    async generate(prompt) {
+      const res = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '16:9' } },
+        }),
+        signal: AbortSignal.timeout(120_000),
+      })
+      if (!res.ok) throw new ProviderError(`google image: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 300)}`)
+      const body = (await res.json()) as { candidates?: { content?: { parts?: { inlineData?: { data: string } }[] } }[] }
+      const data = body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data
+      if (!data) throw new ProviderError('google image: no image in response')
+      return Buffer.from(data, 'base64')
+    },
+  }
+}
+
+export function openAiImages(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): ImageGenerator {
+  return {
+    id: 'openai',
+    async generate(prompt) {
+      const res = await fetchImpl('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt, size: '1536x1024', quality: 'medium', n: 1 }),
+        signal: AbortSignal.timeout(180_000),
+      })
+      if (!res.ok) throw new ProviderError(`openai image: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 300)}`)
+      const body = (await res.json()) as { data?: { b64_json?: string }[] }
+      const data = body.data?.[0]?.b64_json
+      if (!data) throw new ProviderError('openai image: no image in response')
+      return Buffer.from(data, 'base64')
     },
   }
 }

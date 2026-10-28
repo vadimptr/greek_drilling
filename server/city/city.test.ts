@@ -280,3 +280,28 @@ test('scene images are generated in the background, served to the owner and list
   assert.equal((await call('GET', `/api/city/games/${game.id}/scenes/nobody`, undefined, me)).status, 404)
   await close()
 })
+
+test('google image provider decodes inline image data and reports quota errors', async () => {
+  const { googleImages, imageType } = await import('./images.ts')
+  let sent = ''
+  const ok = googleImages('k', 'gemini-2.5-flash-image', (async (_u: string, init: RequestInit) => {
+    sent = String(init.body)
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'x' }, { inlineData: { data: Buffer.from([0xff, 0xd8, 1]).toString('base64') } }] } }] }))
+  }) as typeof fetch)
+  const img = await ok.generate('boat')
+  assert.equal(imageType(img), 'image/jpeg')
+  assert.match(sent, /"responseModalities":\["IMAGE"\]/)
+  const quota = googleImages('k', 'm', (async () => new Response('{"error":{"code":429}}', { status: 429 })) as typeof fetch)
+  await assert.rejects(quota.generate('boat'), /HTTP 429/)
+})
+
+test('openai image provider asks for a landscape image and decodes b64', async () => {
+  const { openAiImages } = await import('./images.ts')
+  let sent = ''
+  const p = openAiImages('k', 'gpt-image-1', (async (_u: string, init: RequestInit) => {
+    sent = String(init.body)
+    return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from('img').toString('base64') }] }))
+  }) as typeof fetch)
+  assert.equal((await p.generate('boat')).toString(), 'img')
+  assert.match(sent, /"size":"1536x1024"/)
+})
