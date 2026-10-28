@@ -8,6 +8,7 @@ export interface CharacterCard {
   roleRu: string
   place: string
   placeRu: string
+  scene?: string | null
 }
 
 export interface NoteFact {
@@ -34,6 +35,7 @@ export interface NotePerson {
 export interface CityGame {
   id: string
   notebook: NotePerson[]
+  scenesEnabled: boolean
   score: number
   total: number
   city: string

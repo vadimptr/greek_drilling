@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
 import { HttpError, readJson, send } from '../http.ts'
+import type { SceneStore } from './images.ts'
 import { ProviderError, type FactMatcher, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
 import { buildPersona, card, CITY_NAME, factsOf, MOODS, tellableBy, type Level, type Mood, type Scenario } from './scenario.ts'
 import {
@@ -17,6 +18,7 @@ export interface CityDeps {
   facts: FactMatcher | null
   translator: Translator | null
   voice: VoiceProvider | null
+  scenes: SceneStore | null
 }
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1']
@@ -82,9 +84,11 @@ function notebook(game: Game) {
   })
 }
 
-function publicGame(game: Game) {
+function publicGame(game: Game, scenes: SceneStore | null) {
   const s = game.scenario
+  const sceneUrl = (id: string) => (scenes?.has(game.id, id) ? `/api/city/games/${game.id}/scenes/${id}` : null)
   return {
+    scenesEnabled: !!scenes?.enabled,
     known: [...reachable(game)],
     notebook: notebook(game),
     score: score(game),
@@ -95,7 +99,7 @@ function publicGame(game: Game) {
     status: game.status,
     startId: s.start_id,
     met: game.met,
-    characters: s.characters.map(card),
+    characters: s.characters.map((c) => ({ ...card(c), scene: sceneUrl(c.id) })),
   }
 }
 
@@ -134,7 +138,8 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
   }
 
   const totalScore = (userId: number) => allGames(db, userId).reduce((sum, g) => sum + score(g), 0)
-  const view = (game: Game) => ({ ...publicGame(game), total: totalScore(game.userId) })
+  const view = (game: Game) => ({ ...publicGame(game, deps.scenes), total: totalScore(game.userId) })
+  const sceneRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/scenes\/([a-z0-9_-]{1,40})$/
 
   const discover = (game: Game, speaker: string, ids: string[]) => {
     const allowedIds = new Set(tellableBy(game.scenario, speaker).map((f) => f.id))
@@ -177,7 +182,19 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       const scenario = await deps.scenarios.generate(level, recentGoals(db, u.id)).catch(providerFailure)
       abandonActive(db, u.id)
       const game = createGame(db, u.id, level, scenario)
+      void deps.scenes?.ensureAll(game.id, scenario)
       send(res, 201, { game: view(game) })
+      return true
+    }
+
+    const sm = sceneRoute.exec(path)
+    if (method === 'GET' && sm) {
+      const u = requireAllowed(user)
+      const game = loadGame(u, sm[1])
+      const png = deps.scenes?.read(game.id, sm[2])
+      if (!png) throw new HttpError(404, 'Картинки пока нет')
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': png.length, 'Cache-Control': 'private, max-age=86400' })
+      res.end(png)
       return true
     }
 
@@ -207,6 +224,7 @@ export function createCity(db: DatabaseSync, deps: CityDeps) {
       if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
       const session = await deps.voice.open(persona).catch(providerFailure)
       recordTalk(db, game, characterId, deps.voice.id)
+      void deps.scenes?.ensure(game.id, character)
       markMet(db, game, characterId)
       send(res, 200, { character: card(character), session, game: view(game) })
       return true

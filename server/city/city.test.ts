@@ -52,6 +52,7 @@ async function start(overrides: Partial<CityDeps> = {}) {
     dailyTalks: 10,
     scenarios: { generate: async () => validateScenario(scenario()) },
     facts: { match: async (_speaker, _lines, facts) => facts.filter((f) => f.id === 'f5').map((f) => f.id) },
+    scenes: null,
     translator: { toRussian: async (text) => { translated.push(text); return `ru:${text}` } },
     voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
     ...overrides,
@@ -258,5 +259,24 @@ test('translation is cached and only for allowed users', async () => {
   await call('POST', '/api/city/translate', { text: 'Γεια σου' }, me)
   assert.deepEqual(translated, ['Γεια σου'])
   assert.equal((await call('POST', '/api/city/translate', { text: '' }, me)).status, 400)
+  await close()
+})
+
+test('scene images are generated in the background, served to the owner and listed on the cards', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { SceneStore } = await import('./images.ts')
+  const prompts: string[] = []
+  const scenes = new SceneStore(mkdtempSync(`${tmpdir()}/scenes-`), { id: 'fake', generate: async (p) => { prompts.push(p); return Buffer.from('png') } })
+  const { call, login, close } = await start({ scenes })
+  const me = await login('Vadim')
+  const game = (await call('POST', '/api/city/games', {}, me)).body.game
+  assert.equal(game.scenesEnabled, true)
+  await new Promise((r) => setTimeout(r, 50))
+  assert.equal(prompts.length, 3)
+  assert.match(prompts[0], /Ελένη/)
+  const again = (await call('GET', '/api/city/games/current', undefined, me)).body.game
+  assert.equal(again.characters[0].scene, `/api/city/games/${game.id}/scenes/eleni`)
+  assert.equal((await call('GET', `/api/city/games/${game.id}/scenes/nobody`, undefined, me)).status, 404)
   await close()
 })

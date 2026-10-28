@@ -21,6 +21,8 @@ services:
       ELEVENLABS_AGENT_ID: ${ELEVENLABS_AGENT_ID:-agent_5001m6153pjwfjf84269kkmrz7a6}
       ELEVENLABS_VOICES: ${ELEVENLABS_VOICES:-}
       ELEVENLABS_SPEED: ${ELEVENLABS_SPEED:-0.9}
+      CITY_IMAGES: ${CITY_IMAGES:-}
+      CITY_IMAGE_MODEL: ${CITY_IMAGE_MODEL:-}
     volumes:
       - data:/data
     restart: unless-stopped

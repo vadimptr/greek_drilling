@@ -3,7 +3,9 @@ import { createApp } from './app.ts'
 import { claudeFacts, claudeScenarios, claudeTranslator } from './city/claude.ts'
 import { elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
 import { parseAllowed } from './city/routes.ts'
+import { elevenLabsImages, SceneStore } from './city/images.ts'
 import { openDb } from './db.ts'
+import { dirname, join } from 'node:path'
 
 const secret = process.env.SESSION_SECRET
 if (!secret || secret.length < 16) {
@@ -29,9 +31,15 @@ const city = {
       : null,
 }
 
+const dataDir = dirname(env.DB_PATH ?? 'data/gd.db')
+const images = env.CITY_IMAGES === 'elevenlabs' && env.ELEVENLABS_API_KEY
+  ? elevenLabsImages(env.ELEVENLABS_API_KEY, env.CITY_IMAGE_MODEL ?? 'gemini-3.1-flash-image')
+  : null
+const scenes = new SceneStore(join(dataDir, 'city-scenes'), images)
+
 const port = Number(env.PORT ?? 3000)
 const db = openDb(env.DB_PATH ?? 'data/gd.db')
-const server = createServer(createApp(db, secret, city))
+const server = createServer(createApp(db, secret, { ...city, scenes }))
 server.listen(port, () => console.log(`api on :${port}`))
 
 const stop = () => server.close(() => { db.close(); process.exit(0) })

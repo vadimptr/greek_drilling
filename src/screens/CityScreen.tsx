@@ -287,93 +287,131 @@ export function CityScreen({ allowed, signedIn, level, speed, onSignIn, onTotal 
   }
 
 
+  const waitingScene = !!game && game.scenesEnabled && game.status === 'active' && game.characters.some((c) => !c.scene)
+
+  useEffect(() => {
+    if (!waitingScene) return
+    const timer = window.setInterval(() => {
+      currentGame()
+        .then((g) => g && applyIfCurrent(g))
+        .catch(() => undefined)
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [waitingScene, game?.id])
+
   const busy = phase === 'loading' || phase === 'generating' || phase === 'connecting' || phase === 'walking'
   const active = game && game.status === 'active'
   const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
 
+  const sceneOf = (id: string | null | undefined) => (id ? (game?.characters.find((c) => c.id === id)?.scene ?? null) : null)
+  const shownId = character?.id ?? (active ? game?.startId : null)
+  const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
+  const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'idle')
+
   return (
     <div className="city-layout">
-    <main className="speak city">
-      <div className="speak-card city-scene">
-        {phase === 'generating' && <div className="city-hint">Придумываю историю…</div>}
-        {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
-        {(phase === 'connecting' || phase === 'talking' || (phase === 'idle' && character)) && character && (
-          <>
-            <div className={speaking ? 'city-name city-name-speaking' : 'city-name'}>{character.name}</div>
-            <Tip text={`${character.roleRu} · ${character.placeRu}`}>
-              <span className="speak-ru">{character.role} · {character.place}</span>
-            </Tip>
-          </>
-        )}
-        {phase === 'idle' && !character && (
-          <div className="city-hint">
-            {!allowed
-              ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
-              : active
-                ? 'Нажми на микрофон, чтобы продолжить'
-                : `Нажми на микрофон — и ты сойдёшь с парома в ${CITY_NAME}`}
-          </div>
-        )}
-        {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
-        {subs && lines.length > 0 && (
-          <div className="city-subs">
-            {lines.slice(-4).map((l, i) => (
-              <Translated
-                key={Math.max(0, lines.length - 4) + i}
-                text={l.text}
-                className={l.role === 'user' ? 'city-line city-line-me' : 'city-line'}
-              >
-                {l.text}
-              </Translated>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="speak-controls">
-        <button
-          className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
-          onClick={onMic}
-          disabled={busy || !allowed}
-          aria-label={phase === 'talking' ? 'Закончить разговор' : 'Начать разговор'}
-        >
-          {busy ? '…' : phase === 'talking' ? '■' : '🎤'}
-        </button>
+      <main className="city">
         {game && phase !== 'generating' && (
           <Tip text={game.goalRu} className="city-goal-wrap">
             <div className={game.status === 'won' ? 'city-goal city-goal-done' : 'city-goal'}>🎯 {game.goal}</div>
           </Tip>
         )}
-        <div className="speak-status" aria-live="polite">
-          {error && <span className="speak-bad">{error}</span>}
-          {!error && notice && phase === 'idle' && <span className="speak-bad">{notice}</span>}
-          {!error && phase === 'connecting' && 'Подхожу…'}
-          {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
-          {!error && phase === 'won' && 'Нажми на микрофон — будет новое задание'}
-          {allowed === false && !signedIn && (
-            <>
-              Разговоры с жителями доступны по приглашению.{' '}
-              <button className="link-btn" onClick={onSignIn}>
-                Войти
-              </button>
-            </>
-          )}
-          {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
+
+        <div className="city-stage">
+          <div className="city-art">
+            {scene ? (
+              <img key={scene} className="city-art-img" src={scene} alt="" />
+            ) : (
+              <div className={phase === 'generating' || phase === 'walking' ? 'city-art-sea city-art-sea-busy' : 'city-art-sea'}>
+                <span className="city-art-sun" />
+                <span className="city-art-wave" />
+              </div>
+            )}
+          </div>
+
+          <div className="city-overlay">
+            {phase === 'generating' && <div className="city-hint">Придумываю историю…</div>}
+            {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
+            {phase === 'won' && <div className="city-won">Задание выполнено! 🎉</div>}
+            {phase === 'idle' && !character && (
+              <div className="city-hint">
+                {!allowed
+                  ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
+                  : active
+                    ? 'Нажми на микрофон, чтобы продолжить'
+                    : `Нажми на микрофон — и ты сойдёшь с парома в ${CITY_NAME}`}
+              </div>
+            )}
+          </div>
+
+          <div className="city-bottom">
+            {showSpeaker && (
+              <div className="city-speaker">
+                <div className={speaking ? 'city-name city-name-speaking' : 'city-name'}>{character.name}</div>
+                <Tip text={`${character.roleRu} · ${character.placeRu}`}>
+                  <span className="city-role">{character.role} · {character.place}</span>
+                </Tip>
+              </div>
+            )}
+            {subs && lines.length > 0 && (
+              <div className="city-subs">
+                {lines.slice(-4).map((l, i) => (
+                  <Translated
+                    key={Math.max(0, lines.length - 4) + i}
+                    text={l.text}
+                    className={l.role === 'user' ? 'city-line city-line-me' : 'city-line'}
+                  >
+                    {l.text}
+                  </Translated>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="speak-actions">
-          {allowed && (
-            <button className="secondary-btn" onClick={toggleSubs}>
-              {subs ? 'Скрыть субтитры' : 'Субтитры'}
+
+        <div className="city-dock">
+          <div className="speak-status" aria-live="polite">
+            {error && <span className="speak-bad">{error}</span>}
+            {!error && notice && phase === 'idle' && <span className="speak-bad">{notice}</span>}
+            {!error && phase === 'connecting' && 'Подхожу…'}
+            {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
+            {!error && phase === 'won' && 'Нажми на микрофон — будет новое задание'}
+            {allowed === false && !signedIn && (
+              <>
+                Разговоры с жителями доступны по приглашению.{' '}
+                <button className="link-btn" onClick={onSignIn}>
+                  Войти
+                </button>
+              </>
+            )}
+            {allowed === false && signedIn && 'Разговоры с жителями пока доступны только по приглашению'}
+          </div>
+          <div className="city-dock-row">
+            <div className="city-dock-side">
+              {allowed && (
+                <button className="secondary-btn" onClick={toggleSubs}>
+                  {subs ? 'Без субтитров' : 'Субтитры'}
+                </button>
+              )}
+            </div>
+            <button
+              className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
+              onClick={onMic}
+              disabled={busy || !allowed}
+              aria-label={phase === 'talking' ? 'Закончить разговор' : 'Начать разговор'}
+            >
+              {busy ? '…' : phase === 'talking' ? '■' : '🎤'}
             </button>
-          )}
-          {phase === 'idle' && active && (
-            <button className="secondary-btn" onClick={() => void startNew()}>
-              Другое задание
-            </button>
-          )}
+            <div className="city-dock-side">
+              {phase === 'idle' && active && (
+                <button className="secondary-btn" onClick={() => void startNew()}>
+                  Другое задание
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
       {allowed && game && (
         <Notebook
           people={game.notebook}
