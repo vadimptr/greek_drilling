@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../../logic/i18n'
 
 interface Props {
   label: string
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function Progress({ label, startedAt, expectedMs }: Props) {
+  const t = useT()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250)
@@ -25,7 +27,7 @@ export function Progress({ label, startedAt, expectedMs }: Props) {
       <div className="pc-track">
         <div className="pc-fill" style={{ width: `${pct}%` }} />
       </div>
-      <div className="pc-eta">{left > 0 ? `осталось ≈ ${left} с` : 'почти готово…'}</div>
+      <div className="pc-eta">{left > 0 ? t('progress.left', { s: left }) : t('progress.almost')}</div>
     </div>
   )
 }

@@ -1,13 +1,21 @@
 import type { Level } from '../../types/word'
+import { translate } from '../i18n'
+import type { Lang } from './name'
+
+let langs: { learn: Lang; hint: Lang } = { learn: 'el', hint: 'ru' }
+
+export function setCityLangs(learn: Lang, hint: Lang): void {
+  langs = { learn, hint }
+}
 
 export interface CharacterCard {
   id: string
   name: string
-  nameRu: string
+  nameHint: string
   role: string
-  roleRu: string
+  roleHint: string
   place: string
-  placeRu: string
+  placeHint: string
   scene?: string | null
   sceneState?: SceneState
   ambience?: string | null
@@ -32,7 +40,7 @@ export type Mood = 'friendly' | 'annoyed' | 'offended' | 'angry'
 export interface NotePerson {
   id: string
   name: string
-  nameRu: string
+  nameHint: string
   gender: 'male' | 'female'
   met: boolean
   mood: Mood
@@ -47,9 +55,10 @@ export interface CityGame {
   scenesEnabled: boolean
   score: number
   total: number
+  lang: Lang
   city: string
   goal: string
-  goalRu: string
+  goalHint: string
   status: 'active' | 'won'
   startId: string
   met: string[]
@@ -86,18 +95,22 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   try {
     res = await fetch(path, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers: {
+        'X-City-Lang': langs.learn,
+        'X-City-Hint': langs.hint,
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new CityError(0, 'Нет связи с сервером')
+    throw new CityError(0, translate(langs.hint, 'city.offline'))
   }
   if (res.status === 204) return undefined as T
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     if (typeof data.error === 'string') throw new CityError(res.status, data.error)
-    if (res.status >= 502 && res.status <= 504) throw new CityError(res.status, 'Сервер обновляется, попробуй ещё раз через минуту')
-    throw new CityError(res.status, 'Ошибка сервера')
+    if (res.status >= 502 && res.status <= 504) throw new CityError(res.status, translate(langs.hint, 'city.updating'))
+    throw new CityError(res.status, translate(langs.hint, 'city.serverError'))
   }
   return data as T
 }
@@ -129,7 +142,7 @@ export const leaderboard = () => call<{ boards: Board[] }>('GET', '/api/city/lea
 
 export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/city/games/current').then((r) => r.game)
 export const newGame = (level: Level) =>
-  call<{ game: CityGame }>('POST', '/api/city/games', { level, hour: new Date().getHours() }).then((r) => r.game)
+  call<{ game: CityGame }>('POST', '/api/city/games', { level, lang: langs.learn }).then((r) => r.game)
 export const talk = (gameId: string, characterId: string, from: string | null, speed: number, resume?: 'voice' | 'tap') =>
   call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed, resume })
 export interface LevelCheck {
@@ -154,10 +167,11 @@ export const completeGame = (gameId: string, characterId: string) =>
 const translations = new Map<string, Promise<string>>()
 
 export function translateCached(text: string): Promise<string> {
-  const key = text.trim()
+  const { learn, hint } = langs
+  const key = `${hint}:${text.trim()}`
   let pending = translations.get(key)
   if (!pending) {
-    pending = call<{ ru: string }>('POST', '/api/city/translate', { text: key }).then((r) => r.ru)
+    pending = call<{ text: string }>('POST', '/api/city/translate', { text: text.trim(), from: learn, to: hint }).then((r) => r.text)
     pending.catch(() => translations.delete(key))
     translations.set(key, pending)
   }

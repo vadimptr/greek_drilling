@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Word } from '../types/word'
-import { APP_STORAGE_KEY, APP_V2_KEY, deserializeApp, initialAppState, loadApp, saveApp, serializeApp } from './appState'
+import { APP_STORAGE_KEY, APP_V2_KEY, deserializeApp, initialAppState, loadApp, saveApp, serializeApp, tabFor, tabsFor } from './appState'
 import { initialState as initialWords } from './state'
 import { STORAGE_KEY as V1_KEY } from './storage'
 
@@ -90,6 +90,27 @@ describe('deserializeApp', () => {
   it('active with empty queue becomes null', () => {
     const raw = JSON.stringify({ ...initialAppState(), grammar: { ...initialAppState().grammar, active: { lessonId: 1, queue: [] } } })
     expect(deserializeApp(raw, null, words, lessonIds).grammar.active).toBeNull()
+  })
+})
+
+describe('learning and hint languages', () => {
+  it('defaults to Greek with Russian hints and never keeps the same language twice', () => {
+    expect(initialAppState().learnLang).toBe('el')
+    expect(initialAppState().hintLang).toBe('ru')
+    const same = deserializeApp(JSON.stringify({ ...initialAppState(), learnLang: 'ru', hintLang: 'ru' }), null, words, lessonIds)
+    expect(same.learnLang).toBe('ru')
+    expect(same.hintLang).toBe('en')
+    const bad = deserializeApp(JSON.stringify({ ...initialAppState(), learnLang: 'de', hintLang: 'xx' }), null, words, lessonIds)
+    expect([bad.learnLang, bad.hintLang]).toEqual(['el', 'ru'])
+  })
+
+  it('only the town is open for English and Russian', () => {
+    expect(tabsFor('el')).toEqual(['words', 'grammar', 'speak', 'spell', 'mock', 'city'])
+    expect(tabsFor('en')).toEqual(['city'])
+    expect(tabFor('grammar', 'ru')).toBe('city')
+    expect(tabFor('grammar', 'el')).toBe('grammar')
+    const saved = deserializeApp(JSON.stringify({ ...initialAppState(), tab: 'words', learnLang: 'en', hintLang: 'ru' }), null, words, lessonIds)
+    expect(saved.tab).toBe('city')
   })
 })
 

@@ -3,7 +3,7 @@ import './App.css'
 import { lessonsUpTo } from './data/grammar'
 import { wordPool } from './data/levels'
 import { variantLevel } from './data/mock'
-import { initialAppState, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
+import { initialAppState, tabFor, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
 import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
@@ -23,8 +23,9 @@ import { AORIST_VERBS } from './data/aorist'
 import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 import { CityScreen } from './screens/CityScreen'
-import { cityAccess } from './logic/city/api'
-import { CITY_NAME } from './logic/city/name'
+import { cityAccess, setCityLangs } from './logic/city/api'
+import { CITY_NAMES, otherLang, type Lang } from './logic/city/name'
+import { translate, UiContext } from './logic/i18n'
 import { parseRoute, pathFor } from './logic/route'
 
 const speechAvailable = canSpeak()
@@ -35,8 +36,9 @@ export default function App() {
   const [app, setApp] = useState<AppState>(() => {
     const loaded = boot.app
     const route = parseRoute(window.location.pathname, window.location.search)
-    return route ? { ...loaded, tab: route.tab, grammarSub: route.sub ?? loaded.grammarSub } : loaded
+    return route ? { ...loaded, tab: tabFor(route.tab, loaded.learnLang), grammarSub: route.sub ?? loaded.grammarSub } : loaded
   })
+  setCityLangs(app.learnLang, app.hintLang)
   const routed = useRef(false)
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function App() {
   useEffect(() => {
     const onPop = () => {
       const route = parseRoute(window.location.pathname, window.location.search)
-      if (route) setApp((a) => ({ ...a, tab: route.tab, grammarSub: route.sub ?? a.grammarSub }))
+      if (route) setApp((a) => ({ ...a, tab: tabFor(route.tab, a.learnLang), grammarSub: route.sub ?? a.grammarSub }))
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
@@ -85,9 +87,16 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [account.user, cityCheck])
+  }, [account.user, cityCheck, app.learnLang, app.hintLang])
 
-  const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab }))
+  useEffect(() => {
+    if (tabFor(app.tab, app.learnLang) !== app.tab) setApp((a) => ({ ...a, tab: tabFor(a.tab, a.learnLang) }))
+  }, [app.tab, app.learnLang])
+
+  const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab: tabFor(tab, a.learnLang) }))
+  const changeLearnLang = (learnLang: Lang) =>
+    setApp((a) => ({ ...a, learnLang, hintLang: otherLang(learnLang, a.hintLang), tab: tabFor(a.tab, learnLang) }))
+  const changeHintLang = (hintLang: Lang) => setApp((a) => (hintLang === a.learnLang ? a : { ...a, hintLang }))
   const changeDirection = (direction: Direction) => setApp((a) => ({ ...a, words: { ...a.words, direction } }))
   const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
   const changeLevel = (level: Level) => setApp((a) => ({ ...a, words: { ...a.words, level } }))
@@ -102,6 +111,8 @@ export default function App() {
       grammarSub: a.grammarSub,
       citySpeed: a.citySpeed,
       cityAmbience: a.cityAmbience,
+      learnLang: a.learnLang,
+      hintLang: a.hintLang,
     }))
     setSettingsOpen(false)
   }
@@ -156,9 +167,9 @@ export default function App() {
     subtitle = `${level} · написано ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'city') {
-    left = { icon: '⭐', value: cityTotal, label: 'Очки за факты', bump: true }
-    right = { icon: '🗣️', value: level, label: 'Уровень' }
-    subtitle = `${CITY_NAME} · жители говорят на уровне ${level}`
+    left = { icon: '⭐', value: cityTotal, label: translate(app.hintLang, 'header.cityPoints'), bump: true }
+    right = { icon: '🗣️', value: level, label: translate(app.hintLang, 'header.level') }
+    subtitle = translate(app.hintLang, 'header.citySubtitle', { city: CITY_NAMES[app.learnLang], level })
     progress = null
   } else {
     const history = app.mock.history.filter((a) => variantLevel(a.variantId) === level)
@@ -171,6 +182,7 @@ export default function App() {
   }
 
   return (
+    <UiContext.Provider value={app.hintLang}>
     <div className="app">
       <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)}
         user={account.user}
@@ -204,12 +216,12 @@ export default function App() {
           <SpellScreen key={level} state={app.spell} words={wordPool(level)} onChange={(spell) => setApp((a) => ({ ...a, spell }))} />
         )}
         {app.tab === 'city' && (
-          <CityScreen key={account.user ?? ''} allowed={cityAllowed} signedIn={!!account.user} needsCode={cityNeedsCode} onUnlocked={() => setCityCheck((n) => n + 1)} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
+          <CityScreen key={`${account.user ?? ''}:${app.learnLang}:${app.hintLang}`} allowed={cityAllowed} lang={app.learnLang} signedIn={!!account.user} needsCode={cityNeedsCode} onUnlocked={() => setCityCheck((n) => n + 1)} level={level} speed={app.citySpeed} ambienceVolume={app.cityAmbience} storyMs={storyMs} onSignIn={() => setAccountOpen(true)} onTotal={setCityTotal} />
         )}
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
-      <TabBar tab={app.tab} onChange={setTab} />
+      <TabBar tab={app.tab} learn={app.learnLang} onChange={setTab} />
 
       <AccountSheet
         open={accountOpen}
@@ -221,6 +233,10 @@ export default function App() {
 
       <SettingsSheet
         open={settingsOpen}
+        learnLang={app.learnLang}
+        hintLang={app.hintLang}
+        onLearnLang={changeLearnLang}
+        onHintLang={changeHintLang}
         direction={app.words.direction}
         autoSpeak={app.words.autoSpeak}
         level={app.words.level}
@@ -238,5 +254,6 @@ export default function App() {
         onClose={() => setSettingsOpen(false)}
       />
     </div>
+    </UiContext.Provider>
   )
 }

@@ -7,7 +7,8 @@ import { Tip } from '../components/city/Tip'
 import { Translated } from '../components/city/Translated'
 import { Progress } from '../components/city/Progress'
 import { useAmbience } from '../logic/city/useAmbience'
-import { CITY_NAME } from '../logic/city/name'
+import { CITY_NAMES, type Lang } from '../logic/city/name'
+import { translate, useT, useUi } from '../logic/i18n'
 import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
 import type { Level } from '../types/word'
 
@@ -15,6 +16,7 @@ type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'ta
 
 interface Props {
   allowed: boolean | null
+  lang: Lang
   signedIn: boolean
   needsCode: boolean
   onUnlocked: () => void
@@ -44,13 +46,16 @@ function readSubs(): boolean {
   }
 }
 
-function errorText(e: unknown): string {
+function errorText(e: unknown, ui: Lang): string {
   if (e instanceof CityError) return e.message
-  if (e instanceof DOMException && e.name === 'NotAllowedError') return 'Доступ к микрофону запрещён. Разреши его в настройках браузера.'
-  return 'Не получилось начать разговор, попробуй ещё раз'
+  if (e instanceof DOMException && e.name === 'NotAllowedError') return translate(ui, 'city.micDenied')
+  return translate(ui, 'city.startFailed')
 }
 
-export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
+export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, level, speed, ambienceVolume, storyMs, onSignIn, onTotal }: Props) {
+  const t = useT()
+  const ui = useUi()
+  const city = CITY_NAMES[lang]
   const [phase, setPhase] = useState<Phase>('loading')
   const [game, setGame] = useState<CityGame | null>(null)
   const [character, setCharacter] = useState<CharacterCard | null>(null)
@@ -77,7 +82,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       await unlockCity(code)
       onUnlocked()
     } catch (e) {
-      setCodeError(e instanceof CityError ? e.message : 'Не получилось проверить код')
+      setCodeError(e instanceof CityError ? e.message : t('city.codeFailed'))
     } finally {
       setUnlocking(false)
     }
@@ -139,7 +144,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       })
       .catch((e) => {
         if (!alive) return
-        setError(errorText(e))
+        setError(errorText(e, ui))
         setPhase('idle')
       })
     return () => {
@@ -193,7 +198,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     if (walkAwayRef.current) {
       walkAwayRef.current = false
       const who = g?.notebook.find((p) => p.id === from)
-      setNotice(`${who?.name ?? 'Собеседник'} не хочет больше с тобой разговаривать`)
+      setNotice(t('city.walkedAway', { name: who?.name ?? t('city.someone') }))
     }
     endingRef.current = false
     const dropped = !leavingRef.current && !walkAwayRef.current && !target && !wonRef.current
@@ -285,7 +290,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     onEnd: () => finishCall(seq),
     onError: (message) => {
       if (seq !== callSeq.current) return
-      setError(message || 'Связь прервалась')
+      setError(message || t('city.dropped'))
     },
   })
 
@@ -301,20 +306,20 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
         const drawn = await waitScene(g, characterId, seq)
         setPaintingId(null)
         if (seq !== callSeq.current) return
-        if (!drawn) setNotice('Картинку нарисовать не получилось — играем без неё')
+        if (!drawn) setNotice(t('city.noScene'))
       }
       setPhase('connecting')
-      const t = await talk(g.id, characterId, from, speedRef.current, resume)
+      const opened = await talk(g.id, characterId, from, speedRef.current, resume)
       if (seq !== callSeq.current) return
-      applyGame(t.game)
+      applyGame(opened.game)
       currentRef.current = characterId
-      setCharacter(t.character)
+      setCharacter(opened.character)
       linesRef.current = []
       setLines([])
       lastAgentLineRef.current = 0
       pendingFactsRef.current = []
       modeRef.current = 'listening'
-      const call = await startVoice(t.session, handlers(seq))
+      const call = await startVoice(opened.session, handlers(seq))
       if (seq !== callSeq.current) {
         void call.end()
         return
@@ -323,7 +328,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       setPhase('talking')
     } catch (e) {
       if (seq !== callSeq.current) return
-      setError(errorText(e))
+      setError(errorText(e, ui))
       setPhase('idle')
     }
   }
@@ -374,7 +379,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
         setGame(previous)
         setCharacter(previousCharacter)
       }
-      setError(errorText(e))
+      setError(errorText(e, ui))
       setPhase('idle')
     }
   }
@@ -455,7 +460,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
     <div className="city-layout">
       <main className="city">
         {game && phase !== 'generating' && (
-          <Tip text={game.goalRu} className="city-goal-wrap" placement="below">
+          <Tip text={game.goalHint} className="city-goal-wrap" placement="below">
             <div className={game.status === 'won' ? 'city-goal city-goal-done' : 'city-goal'}>🎯 {game.goal}</div>
           </Tip>
         )}
@@ -473,34 +478,34 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
           </div>
 
           <div className="city-overlay">
-            {phase === 'generating' && <Progress label="Придумываю историю…" startedAt={storyStartedAt} expectedMs={storyMs} />}
+            {phase === 'generating' && <Progress label={t('city.inventing')} startedAt={storyStartedAt} expectedMs={storyMs} />}
             {phase !== 'generating' && sceneState?.state === 'drawing' && (
               <Progress
-                label={phase === 'painting' ? 'Рисую сцену, потом начнём разговор…' : 'Рисую сцену…'}
+                label={phase === 'painting' ? t('city.drawingThenTalk') : t('city.drawing')}
                 startedAt={gameAt - sceneState.elapsedMs}
                 expectedMs={sceneState.expectedMs}
               />
             )}
-            {phase === 'painting' && (!sceneState || sceneState.state === 'none') && <div className="city-hint city-hint-small">🎨 Готовлю сцену…</div>}
-            {phase !== 'generating' && sceneState?.state === 'queued' && <div className="city-hint city-hint-small">🎨 Сцена в очереди на отрисовку</div>}
-            {phase === 'walking' && <div className="city-hint">Идёшь дальше по городу…{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
+            {phase === 'painting' && (!sceneState || sceneState.state === 'none') && <div className="city-hint city-hint-small">{t('city.preparing')}</div>}
+            {phase !== 'generating' && sceneState?.state === 'queued' && <div className="city-hint city-hint-small">{t('city.queued')}</div>}
+            {phase === 'walking' && <div className="city-hint">{t('city.walking')}{walkingTo ? ` ${walkingTo.name}` : ''}</div>}
             {done && (
               <div className="city-won-card">
-                <div className="city-won">Задание выполнено! 🎉</div>
+                <div className="city-won">{t('city.won')}</div>
                 <button className="primary-btn" onClick={() => void startNew()}>
-                  Новое задание
+                  {t('city.newTask')}
                 </button>
               </div>
             )}
             {phase === 'idle' && !character && !done && (
               <div className="city-hint">
                 {!allowed
-                  ? `${CITY_NAME} — выдуманный греческий городок у моря. Ты турист, который только что сошёл с парома: получаешь задание и выполняешь его, разговаривая голосом с жителями по-гречески.`
+                  ? t(`city.intro.${lang}` as const, { city })
                   : active
                     ? choosing
-                      ? 'Ты отошёл от собеседника. Выбери в блокноте, к кому подойти'
-                      : 'Нажми на микрофон, чтобы подойти к первому человеку'
-                    : `Нажми на микрофон — и ты сойдёшь с парома в ${CITY_NAME}`}
+                      ? t('city.choose')
+                      : t('city.first')
+                    : t(`city.start.${lang}` as const, { city })}
               </div>
             )}
           </div>
@@ -509,7 +514,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
             {showSpeaker && (
               <div className="city-speaker">
                 <div className={speaking ? 'city-name city-name-speaking' : 'city-name'}>{character.name}</div>
-                <Tip text={`${character.roleRu} · ${character.placeRu}`}>
+                <Tip text={`${character.nameHint !== character.name ? `${character.nameHint} · ` : ''}${character.roleHint} · ${character.placeHint}`}>
                   <span className="city-role">{character.role} · {character.place}</span>
                 </Tip>
               </div>
@@ -534,19 +539,19 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
           {!error && notice && <div className="city-notice">{notice}</div>}
           <div className="speak-status" aria-live="polite">
             {error && <span className="speak-bad">{error}</span>}
-            {!error && phase === 'connecting' && 'Подхожу…'}
-            {!error && phase === 'talking' && (speaking ? 'Говорит…' : 'Слушает тебя')}
-            {!error && phase === 'paused' && '⏸ Ты долго молчал — нажми на микрофон, чтобы продолжить'}
-            {!error && done && 'Задание выполнено — начни новое кнопкой или микрофоном'}
+            {!error && phase === 'connecting' && t('city.approaching')}
+            {!error && phase === 'talking' && (speaking ? t('city.speaking') : t('city.listening'))}
+            {!error && phase === 'paused' && t('city.paused')}
+            {!error && done && t('city.doneStatus')}
             {allowed === false && !signedIn && (
               <>
-                Разговоры с жителями доступны по приглашению.{' '}
+                {t('city.invite')}{' '}
                 <button className="link-btn" onClick={onSignIn}>
-                  Войти
+                  {t('header.signIn')}
                 </button>
               </>
             )}
-            {allowed === false && signedIn && !needsCode && 'Разговоры с жителями пока доступны только по приглашению'}
+            {allowed === false && signedIn && !needsCode && t('city.inviteOnly')}
           {allowed === false && signedIn && needsCode && (
             <form
               className="city-code"
@@ -555,17 +560,17 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
                 void submitCode()
               }}
             >
-              <span>Введи код доступа к городу:</span>
+              <span>{t('city.enterCode')}</span>
               <input
                 className="account-input city-code-input"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="XXXX-XXXX"
                 autoComplete="one-time-code"
-                aria-label="Код доступа"
+                aria-label={t('city.codeAria')}
               />
               <button className="primary-btn" type="submit" disabled={unlocking || !code.trim()}>
-                Открыть
+                {t('city.open')}
               </button>
               {codeError && <span className="speak-bad">{codeError}</span>}
             </form>
@@ -576,12 +581,17 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
               text={
                 levelCheck.check.issues.length
                   ? levelCheck.check.issues.map((i) => `«${i.text}» — ${i.reason}`).join('\n')
-                  : `Все реплики подходят для ${levelCheck.check.level}`
+                  : t('city.levelOk', { level: levelCheck.check.level })
               }
             >
               <span className={levelCheck.check.issues.length ? 'city-level city-level-warn' : 'city-level'}>
-                📏 {levelCheck.who}: {levelCheck.check.total - levelCheck.check.issues.length} из {levelCheck.check.total} реплик по уровню{' '}
-                {levelCheck.check.level}
+                📏{' '}
+                {t('city.levelCount', {
+                  who: levelCheck.who,
+                  ok: levelCheck.check.total - levelCheck.check.issues.length,
+                  total: levelCheck.check.total,
+                  level: levelCheck.check.level,
+                })}
               </span>
             </Tip>
           )}
@@ -589,7 +599,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
             <div className="city-dock-side">
               {allowed && (
                 <button className="secondary-btn" onClick={toggleSubs}>
-                  {subs ? 'Без субтитров' : 'Субтитры'}
+                  {subs ? t('city.subsOff') : t('city.subsOn')}
                 </button>
               )}
             </div>
@@ -597,24 +607,24 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
               className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
               onClick={onMic}
               disabled={busy || !allowed || choosing}
-              aria-label={phase === 'talking' ? 'Закончить разговор' : 'Начать разговор'}
+              aria-label={phase === 'talking' ? t('city.endTalk') : t('city.startTalk')}
             >
               {busy ? '…' : phase === 'talking' ? '■' : phase === 'paused' ? '▶' : '🎤'}
             </button>
             <div className="city-dock-side">
               {phase === 'paused' && (
                 <button className="secondary-btn" onClick={stepAway}>
-                  Отойти
+                  {t('city.stepAway')}
                 </button>
               )}
               {phase === 'idle' && active && (
                 <button className="secondary-btn" onClick={() => void startNew()}>
-                  Другое задание
+                  {t('city.otherTask')}
                 </button>
               )}
               {done && (
                 <button className="secondary-btn" onClick={() => void startNew()}>
-                  Новое задание
+                  {t('city.newTask')}
                 </button>
               )}
             </div>
@@ -623,6 +633,7 @@ export function CityScreen({ allowed, signedIn, needsCode, onUnlocked, level, sp
       </main>
       {allowed && game && (
         <Notebook
+          city={city}
           people={game.notebook}
           score={game.score}
           fresh={fresh}

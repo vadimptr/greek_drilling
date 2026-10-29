@@ -21,7 +21,7 @@ const voiceConfig =
     ? {
         apiKey: env.ELEVENLABS_API_KEY,
         agentId: env.ELEVENLABS_AGENT_ID,
-        voices: parseVoices(env.ELEVENLABS_VOICES),
+        voices: { el: parseVoices(env.ELEVENLABS_VOICES), en: parseVoices(env.ELEVENLABS_VOICES_EN), ru: parseVoices(env.ELEVENLABS_VOICES_RU) },
         speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
       }
     : null

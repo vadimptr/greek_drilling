@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { enter, type Session } from '../logic/account'
 import { NAME_MAX, nameError } from '../logic/name'
+import { useT, useUi } from '../logic/i18n'
 
 interface Props {
   open: boolean
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props) {
+  const t = useT()
+  const ui = useUi()
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState(false)
@@ -29,7 +32,7 @@ export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props
   const submit = async (create: boolean) => {
     const invalid = nameError(name)
     if (invalid) {
-      setError(invalid)
+      setError(ui === 'ru' ? invalid : t('account.rules', { max: NAME_MAX }))
       return
     }
     setBusy(true)
@@ -60,9 +63,9 @@ export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         {user ? (
           <>
-            <h2 className="sheet-title">Аккаунт</h2>
+            <h2 className="sheet-title">{t('account.title')}</h2>
             <div className="account-name">👤 {user}</div>
-            <div className="sheet-label">Прогресс сохраняется на сервере — войдите под этим именем на любом устройстве.</div>
+            <div className="sheet-label">{t('account.saved')}</div>
             <button
               className="danger-btn"
               onClick={() => {
@@ -70,32 +73,30 @@ export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props
                 onClose()
               }}
             >
-              Выйти
+              {t('account.signOut')}
             </button>
             <button className="secondary-btn" onClick={onClose}>
-              Закрыть
+              {t('common.close')}
             </button>
           </>
         ) : confirm ? (
           <>
-            <h2 className="sheet-title">Новый аккаунт</h2>
+            <h2 className="sheet-title">{t('account.new')}</h2>
             <div>
-              Такого имени ещё нет — создать аккаунт <b>{name.trim()}</b>?
+              {t('account.create?')} <b>{name.trim()}</b>?
             </div>
             {error && <div className="account-error">{error}</div>}
             <button className="primary-btn" disabled={busy} onClick={() => void submit(true)}>
-              Создать
+              {t('account.create')}
             </button>
             <button className="secondary-btn" disabled={busy} onClick={() => setConfirm(false)}>
-              Исправить
+              {t('account.fix')}
             </button>
           </>
         ) : (
           <form className="account-form" onSubmit={onSubmit}>
-            <h2 className="sheet-title">Вход</h2>
-            <div className="sheet-label">
-              Придумайте имя и входите под ним на любом устройстве — прогресс будет общий. Пароль не нужен.
-            </div>
+            <h2 className="sheet-title">{t('account.signIn')}</h2>
+            <div className="sheet-label">{t('account.howto')}</div>
             <input
               className="account-input"
               value={name}
@@ -103,7 +104,7 @@ export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props
                 setName(e.target.value.replace(/\s/g, ''))
                 setError(null)
               }}
-              placeholder="Ваше имя"
+              placeholder={t('account.placeholder')}
               maxLength={NAME_MAX}
               autoComplete="username"
               autoCapitalize="off"
@@ -111,13 +112,13 @@ export function AccountSheet({ open, user, onSignIn, onSignOut, onClose }: Props
               spellCheck={false}
               autoFocus
             />
-            <div className="sheet-label">3–{NAME_MAX} символа: буквы, цифры, _ и -</div>
+            <div className="sheet-label">{t('account.rules', { max: NAME_MAX })}</div>
             {error && <div className="account-error">{error}</div>}
             <button className="primary-btn" type="submit" disabled={busy || name.length === 0}>
-              Продолжить
+              {t('account.continue')}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose}>
-              Без входа
+              {t('account.skip')}
             </button>
           </form>
         )}

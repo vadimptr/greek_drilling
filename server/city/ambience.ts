@@ -1,23 +1,24 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ProviderError } from './providers.ts'
-import type { Character } from './scenario.ts'
+import { LANGS, type Character, type Lang, type Scenario } from './scenario.ts'
+import { AMBIENCE_IDS, settingOf, type Ambience } from './settings.ts'
 
-export const AMBIENCES = {
-  harbour: 'Calm Greek harbour: gentle waves lapping against a stone pier, distant seagulls, wooden fishing boats creaking softly on their ropes',
-  fish_market: 'Small open-air fish market by the sea: muffled voices of a few vendors, ice being scooped, seagulls overhead, gentle waves nearby',
-  kafeneio: 'Traditional Greek village café: clicking backgammon dice and pieces, spoons in small coffee cups, soft murmur of old men talking, a chair scraping',
-  square: 'Sunny small Greek town square: cicadas in a plane tree, a small fountain trickling, distant footsteps and a scooter passing far away',
-  bakery: 'Small bakery shop: oven door, trays sliding, paper bags rustling, a shop bell ringing once, quiet street outside',
-  shop: 'Small grocery shop: rustling bags, a cash drawer, a fridge humming, a door bell, quiet street outside',
-  beach: 'Beach taverna by the sea: soft waves on pebbles, plates and glasses clinking quietly, warm breeze, distant laughter',
-  hill: 'Hilltop above the sea near a small chapel: warm wind in dry grass, cicadas, goat bells far away, a distant church bell',
-  lane: 'Narrow whitewashed lane in a Greek island town: footsteps on stone, a cat, birds, distant radio, a door closing',
-  kiosk: 'Street kiosk on a Greek town square: rustling newspapers, a fridge humming, passing footsteps, distant traffic and cicadas',
-} as const
+export type { Ambience }
+export { AMBIENCE_IDS }
 
-export type Ambience = keyof typeof AMBIENCES
-export const AMBIENCE_IDS = Object.keys(AMBIENCES) as Ambience[]
+export type AmbienceKey = string
+
+export function ambienceKey(lang: Lang, id: Ambience): AmbienceKey {
+  return lang === 'el' ? id : `${lang}_${id}`
+}
+
+export function parseAmbienceKey(key: string): { lang: Lang; id: Ambience } | null {
+  const m = /^(?:(en|ru)_)?([a-z_]+)$/.exec(key)
+  const id = m?.[2] as Ambience | undefined
+  if (!m || !id || !AMBIENCE_IDS.includes(id)) return null
+  return { lang: (m[1] as Lang | undefined) ?? 'el', id }
+}
 
 const GUESS: [RegExp, Ambience][] = [
   [/ψαραγορ|рыбн|рынок|ψάρ|market/i, 'fish_market'],
@@ -33,9 +34,14 @@ const GUESS: [RegExp, Ambience][] = [
 ]
 
 export function ambienceOf(c: Character): Ambience {
-  if (c.ambience && c.ambience in AMBIENCES) return c.ambience as Ambience
-  const text = `${c.place_el} ${c.place_ru} ${c.role_ru}`
+  if (c.ambience && AMBIENCE_IDS.includes(c.ambience as Ambience)) return c.ambience as Ambience
+  const fields = c as Record<string, unknown>
+  const text = LANGS.flatMap((l) => [fields[`place_${l}`], fields[`role_${l}`]]).filter(Boolean).join(' ')
   return GUESS.find(([re]) => re.test(text))?.[1] ?? 'square'
+}
+
+export function ambienceKeysOf(s: Scenario): AmbienceKey[] {
+  return s.characters.map((c) => ambienceKey(s.lang ?? 'el', ambienceOf(c)))
 }
 
 export interface SoundGenerator {
@@ -43,7 +49,7 @@ export interface SoundGenerator {
 }
 
 export class AmbienceStore {
-  private pending = new Map<Ambience, Promise<void>>()
+  private pending = new Map<AmbienceKey, Promise<void>>()
   private pausedUntil = 0
   private dir: string
   private generator: SoundGenerator | null
@@ -53,40 +59,41 @@ export class AmbienceStore {
     this.generator = generator
   }
 
-  private path(id: Ambience): string {
-    return join(this.dir, `${id}.mp3`)
+  private path(key: AmbienceKey): string {
+    return join(this.dir, `${key}.mp3`)
   }
 
-  has(id: Ambience): boolean {
-    return existsSync(this.path(id))
+  has(key: AmbienceKey): boolean {
+    return existsSync(this.path(key))
   }
 
-  read(id: string): Buffer | null {
-    if (!(id in AMBIENCES)) return null
-    const p = this.path(id as Ambience)
+  read(key: string): Buffer | null {
+    if (!parseAmbienceKey(key)) return null
+    const p = this.path(key)
     return existsSync(p) ? readFileSync(p) : null
   }
 
-  ensure(id: Ambience): Promise<void> {
-    if (!this.generator || Date.now() < this.pausedUntil || this.has(id)) return Promise.resolve()
-    const running = this.pending.get(id)
+  ensure(key: AmbienceKey): Promise<void> {
+    const parsed = parseAmbienceKey(key)
+    if (!parsed || !this.generator || Date.now() < this.pausedUntil || this.has(key)) return Promise.resolve()
+    const running = this.pending.get(key)
     if (running) return running
     const job = this.generator
-      .generate(`${AMBIENCES[id]}. Continuous seamless background ambience, no music, no speech.`)
+      .generate(`${settingOf(parsed.lang).ambience[parsed.id]}. Continuous seamless background ambience, no music, no speech.`)
       .then((mp3) => {
         mkdirSync(this.dir, { recursive: true })
-        writeFileSync(this.path(id), mp3)
+        writeFileSync(this.path(key), mp3)
       })
       .catch((e) => {
         if (e instanceof ProviderError && /\b(401|402|429)\b|permission|quota/i.test(e.message)) this.pausedUntil = Date.now() + 15 * 60_000
-        console.error(`ambience ${id}:`, e instanceof Error ? e.message : e)
+        console.error(`ambience ${key}:`, e instanceof Error ? e.message : e)
       })
-      .finally(() => this.pending.delete(id))
-    this.pending.set(id, job)
+      .finally(() => this.pending.delete(key))
+    this.pending.set(key, job)
     return job
   }
 
-  ensureMany(ids: Ambience[]): Promise<void> {
+  ensureMany(ids: AmbienceKey[]): Promise<void> {
     return [...new Set(ids)].reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(id)), Promise.resolve())
   }
 }

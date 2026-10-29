@@ -1,28 +1,31 @@
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ProviderError } from './providers.ts'
-import type { Character, Scenario, TimeOfDay } from './scenario.ts'
+import { anyText, textOf, type Character, type Lang, type Scenario, type TimeOfDay } from './scenario.ts'
+import { settingOf } from './settings.ts'
 
 export interface ImageGenerator {
   id: string
   generate(prompt: string): Promise<Buffer>
 }
 
-const STYLE = `Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition. Absolutely no text, letters, signs, boat names or captions anywhere in the image.
-Setting: a small fictional harbour town on the Aegean coast of Greece — whitewashed houses with blue doors and shutters, bougainvillea, stone lanes, fishing boats (kaikia), the sea always nearby.`
+const STYLE = 'Warm watercolor storybook illustration, soft light, gentle colors, slightly painterly details, wide cinematic 16:9 composition. Absolutely no text, letters, signs, boat names or captions anywhere in the image.'
 
 const AGE: Record<Character['age'], string> = { young: 'young adult (25 years old)', middle: 'middle-aged', old: 'elderly' }
 
 const LIGHT: Record<TimeOfDay, string> = {
-  morning: 'Early morning: soft golden low sunlight, long gentle shadows, fresh air, calm sea.',
-  noon: 'Midday: bright high sun, short shadows, vivid blue sky and sea, shimmering heat.',
+  morning: 'Early morning: soft golden low sunlight, long gentle shadows, fresh air, calm water.',
+  noon: 'Midday: bright high sun, short shadows, vivid blue sky and water.',
   evening: 'Evening at sunset: warm orange and pink sky, long shadows, the first street lamps and lanterns lighting up.',
-  night: 'Night: dark blue sky with the moon and stars, warm yellow light from street lamps, windows and lanterns, the sea reflecting the lights.',
+  night: 'Night: dark blue sky with the moon and stars, warm yellow light from street lamps, windows and lanterns, the water reflecting the lights.',
 }
 
-export function scenePrompt(c: Character, time?: TimeOfDay): string {
+export function scenePrompt(c: Character, time?: TimeOfDay, lang: Lang = 'el'): string {
+  const set = settingOf(lang)
+  const place = [textOf(c, 'place', 'en'), textOf(c, 'place', lang)].filter(Boolean).join(' / ') || anyText(c, 'place')
   return `${STYLE}
-Scene, first-person view (the viewer is not visible): ${c.name_el}, a ${AGE[c.age]} Greek ${c.gender === 'male' ? 'man' : 'woman'} — ${c.role_ru} — at ${c.place_el} (${c.place_ru}).
+Setting: ${set.image}.
+Scene, first-person view (the viewer is not visible): ${textOf(c, 'name', lang) ?? anyText(c, 'name')}, a ${AGE[c.age]} ${set.nationality} ${c.gender === 'male' ? 'man' : 'woman'} — ${textOf(c, 'role', 'en') ?? anyText(c, 'role')} — at ${place}.
 ${c.personality} The person is in the middle of the frame, looking towards the viewer in a friendly way, the place around them is clearly visible.${time ? `\n${LIGHT[time]}` : ''}`
 }
 
@@ -99,13 +102,14 @@ export class SceneStore {
 
   ensureAll(gameId: string, s: Scenario): Promise<void> {
     const time = s.time_of_day
+    const lang = s.lang ?? 'el'
     const order = [s.start_id, ...s.characters.map((c) => c.id).filter((id) => id !== s.start_id)]
     const todo = order.filter((id) => !this.has(gameId, id) && !this.pending.has(`${gameId}/${id}`))
     if (this.enabled) todo.forEach((id) => this.queued.add(`${gameId}/${id}`))
-    return todo.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!, time)), Promise.resolve())
+    return todo.reduce<Promise<void>>((chain, id) => chain.then(() => this.ensure(gameId, s.characters.find((c) => c.id === id)!, time, lang)), Promise.resolve())
   }
 
-  ensure(gameId: string, c: Character, time?: TimeOfDay): Promise<void> {
+  ensure(gameId: string, c: Character, time?: TimeOfDay, lang: Lang = 'el'): Promise<void> {
     const key = `${gameId}/${c.id}`
     if (!this.enabled || this.has(gameId, c.id) || this.recentlyFailed(key)) {
       this.queued.delete(key)
@@ -117,7 +121,7 @@ export class SceneStore {
     const startedAt = Date.now()
     this.started.set(key, startedAt)
     const job = this.generator!
-      .generate(scenePrompt(c, time))
+      .generate(scenePrompt(c, time, lang))
       .then((png) => {
         this.timing.record(Date.now() - startedAt)
         this.failed.delete(key)

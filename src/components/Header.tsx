@@ -1,3 +1,5 @@
+import { useT } from '../logic/i18n'
+
 export interface Stat {
   icon: string
   value: string | number
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export function Header({ left, right, subtitle, progress, onSettings, user, onAccount }: Props) {
+  const t = useT()
   const pct = progress === null ? 0 : Math.round(Math.min(1, Math.max(0, progress)) * 100)
   return (
     <header className="header">
@@ -33,16 +36,16 @@ export function Header({ left, right, subtitle, progress, onSettings, user, onAc
           <span className="stat-value">{right.value}</span>
         </div>
         {user !== null ? (
-          <button className="icon-btn user-btn" onClick={onAccount} aria-label={`Аккаунт: ${user}`}>
+          <button className="icon-btn user-btn" onClick={onAccount} aria-label={`${t('header.account')}: ${user}`}>
             <span className="user-btn-icon">👤</span>
             <span className="user-btn-name">{user}</span>
           </button>
         ) : (
           <button className="icon-btn login-btn" onClick={onAccount}>
-            Войти
+            {t('header.signIn')}
           </button>
         )}
-        <button className="icon-btn" onClick={onSettings} aria-label="Настройки">
+        <button className="icon-btn" onClick={onSettings} aria-label={t('header.settings')}>
           ⚙︎
         </button>
       </div>

@@ -54,17 +54,20 @@ async function start(overrides: Partial<CityDeps> = {}) {
     scenarios: { generate: async () => validateScenario(scenario()) },
     facts: { match: async (_speaker, _lines, facts) => ({ facts: facts.filter((f) => f.id === 'f5').map((f) => f.id), people: [] }) },
     scenes: null,
-    translator: { toRussian: async (text) => { translated.push(text); return `ru:${text}` }, toGreek: async (text) => `el:${text}` },
+    translator: {
+      translate: async (text, to) => { translated.push(text); return `${to}:${text}` },
+      translateMany: async (texts, to) => texts.map((t) => `${to}:${t}`),
+    },
     voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
     ...overrides,
   }
   const server = createServer(createApp(db, SECRET, deps))
   await new Promise<void>((r) => server.listen(0, r))
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-  const call = async (method: string, path: string, body?: unknown, cookie?: string) => {
+  const call = async (method: string, path: string, body?: unknown, cookie?: string, headers: Record<string, string> = {}) => {
     const res = await fetch(base + path, {
       method,
-      headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     const text = await res.text()
@@ -91,14 +94,15 @@ test('game flow: start character, referral chain, completion only by the solver'
   const created = await call('POST', '/api/city/games', { level: 'A1' }, me)
   assert.equal(created.status, 201)
   const game = created.body.game
-  assert.equal(game.goal, 'Узнай у рыбака, что он поймал')
+  assert.equal(game.goal, 'el:Узнай у рыбака, что он поймал')
+  assert.equal(game.goalHint, 'Узнай у рыбака, что он поймал')
   assert.equal(game.startId, 'eleni')
 
   const talk = (characterId: string, from?: string) => call('POST', `/api/city/games/${game.id}/talk`, { characterId, from }, me)
   assert.equal((await talk('yiannis')).status, 409)
   const first = await talk('eleni')
   assert.equal(first.status, 200)
-  assert.deepEqual(first.body.character, { id: 'eleni', name: 'Ελένη', nameRu: 'Элени', role: 'племянница рыбака', roleRu: 'племянница рыбака', place: 'πλατεία', placeRu: 'площадь' })
+  assert.deepEqual(first.body.character, { id: 'eleni', name: 'Ελένη', nameHint: 'Элени', role: 'el:племянница рыбака', roleHint: 'племянница рыбака', place: 'πλατεία', placeHint: 'площадь' })
   assert.deepEqual(first.body.session, { provider: 'fake', connection: { token: 't' } })
   assert.deepEqual(first.body.game.known, ['eleni'])
   assert.equal((await talk('kostas', 'eleni')).status, 409)
@@ -170,7 +174,7 @@ test('elevenlabs session carries token, persona overrides and the matching voice
     url = u
     return new Response(JSON.stringify({ token: 'tok' }))
   }) as typeof fetch
-  const provider = elevenLabsVoice({ apiKey: 'k', agentId: 'agent_1', voices, speed: 0.9 }, fakeFetch)
+  const provider = elevenLabsVoice({ apiKey: 'k', agentId: 'agent_1', voices: { el: voices }, speed: 0.9 }, fakeFetch)
   const persona = buildPersona(validateScenario(scenario()), 'eleni', 'A2', { met: [], cameFrom: null, mood: 'friendly', previous: [] })
   const s = await provider.open(persona)
   assert.match(url, /conversation\/token\?agent_id=agent_1$/)
@@ -195,7 +199,7 @@ test('notebook: initial facts of the met, points for told facts, goal facts comp
   const { call, login, opened, close } = await start()
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
-  assert.deepEqual(game.notebook, [{ id: 'eleni', name: 'Ελένη', nameRu: 'Элени', gender: 'female', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f1', text: 'на вид лет двадцать', points: 0, goal: false }], hidden: 1 }])
+  assert.deepEqual(game.notebook, [{ id: 'eleni', name: 'Ελένη', nameHint: 'Элени', gender: 'female', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f1', text: 'на вид лет двадцать', points: 0, goal: false }], hidden: 1 }])
   assert.equal(game.score, 0)
 
   const facts = (speaker: string, factIds: string[]) => call('POST', `/api/city/games/${game.id}/facts`, { characterId: speaker, factIds }, me)
@@ -207,7 +211,7 @@ test('notebook: initial facts of the met, points for told facts, goal facts comp
   assert.equal(told.score, 22)
   assert.equal(told.total, 22)
   assert.deepEqual(told.notebook.map((p: { id: string }) => p.id), ['eleni', 'yiannis'])
-  assert.deepEqual(told.notebook[1], { id: 'yiannis', name: 'Γιάννης', nameRu: 'Яннис', gender: 'male', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f4', text: 'учился в Афинах', points: 12, goal: false }], hidden: 2 })
+  assert.deepEqual(told.notebook[1], { id: 'yiannis', name: 'Γιάννης', nameHint: 'Яннис', gender: 'male', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f4', text: 'учился в Афинах', points: 12, goal: false }], hidden: 2 })
 
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
   await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'yiannis', from: 'kostas' }, me)
@@ -259,7 +263,7 @@ test('translation is cached and only for allowed users', async () => {
   const { call, login, translated, close } = await start()
   assert.equal((await call('POST', '/api/city/translate', { text: 'Γεια' }, await login('Guest'))).status, 403)
   const me = await login('Vadim')
-  assert.deepEqual((await call('POST', '/api/city/translate', { text: ' Γεια σου ' }, me)).body, { ru: 'ru:Γεια σου' })
+  assert.deepEqual((await call('POST', '/api/city/translate', { text: ' Γεια σου ' }, me)).body, { text: 'ru:Γεια σου' })
   await call('POST', '/api/city/translate', { text: 'Γεια σου' }, me)
   assert.deepEqual(translated, ['Γεια σου'])
   assert.equal((await call('POST', '/api/city/translate', { text: '' }, me)).status, 400)
@@ -319,7 +323,7 @@ test('old games without Greek goal get it filled in once on load', async () => {
   await call('POST', '/api/city/games', {}, me)
   const game = (await call('GET', '/api/city/games/current', undefined, me)).body.game
   assert.equal(game.goal, 'el:Узнай у рыбака, что он поймал')
-  assert.equal(game.goalRu, 'Узнай у рыбака, что он поймал')
+  assert.equal(game.goalHint, 'Узнай у рыбака, что он поймал')
   assert.equal(game.characters[0].role, 'el:племянница рыбака')
   await close()
 })
@@ -327,7 +331,7 @@ test('old games without Greek goal get it filled in once on load', async () => {
 test('leaderboard ranks players per category, hides other names, keeps you visible', () => {
   const s = validateScenario(scenario())
   const g = (userId: number, found: string[], won: boolean): Game => ({
-    id: `g${userId}${found.join('')}`, userId, level: 'A2', scenario: s, met: [], found, heard: [], moods: {}, reasons: {}, status: won ? 'won' : 'active',
+    id: `g${userId}${found.join('')}`, userId, lang: 'el', level: 'A2', scenario: s, met: [], found, heard: [], moods: {}, reasons: {}, status: won ? 'won' : 'active',
   })
   const games = [g(1, ['f2'], false), g(2, ['f5', 'f6'], true), g(3, ['f2', 'f4'], true), g(3, [], true)]
   const boards = leaderboard(games, 1, (id) => `user${id}`)
@@ -345,7 +349,7 @@ test('leaderboard ranks players per category, hides other names, keeps you visib
 test('audio tags are stripped from lines; level check is returned and its notes reach the next persona', async () => {
   const { call, login, opened, close } = await start({
     facts: null,
-    levels: { check: async (_level, lines) => (lines.length > 1 ? [{ index: 1, reason_ru: 'перфект «έχεις κάψει»', note_en: 'Do not use the perfect tense.' }] : []) },
+    levels: { check: async (_level, lines) => (lines.length > 1 ? [{ index: 1, reason: 'перфект «έχεις κάψει»', note_en: 'Do not use the perfect tense.' }] : []) },
   })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', { level: 'A1' }, me)).body.game
@@ -365,10 +369,10 @@ test('audio tags are stripped from lines; level check is returned and its notes 
 
 test('stripTags and moderated voices', async () => {
   assert.equal(stripTags('[excited] [laugh] Καλώς ήρθατε! [slow]'), 'Καλώς ήρθατε!')
-  const cfg = { apiKey: 'k', agentId: 'a', speed: 1, voices: parseVoices('female-young=bad|good,male=bad') }
+  const cfg = { apiKey: 'k', agentId: 'a', speed: 1, voices: { el: parseVoices('female-young=bad|good,male=bad') } }
   const fake = (async (u: string) => new Response(JSON.stringify({ sharing: { live_moderation_enabled: u.endsWith('/bad') } }))) as typeof fetch
   assert.deepEqual(await dropModeratedVoices(cfg, fake), ['bad', 'bad'])
-  assert.deepEqual(cfg.voices, { 'female-young': ['good'] })
+  assert.deepEqual(cfg.voices, { el: { 'female-young': ['good'] } })
 })
 
 test('ambience: guessed from the place for old scenarios, generated once, served and linked from cards', async () => {
@@ -439,7 +443,7 @@ test('story editor: a rejected draft is redrafted with the problems, at most a f
   let n = 0
   const result = await draftAndReview(
     async (problems) => { seen.push(problems); return drafts[n++] },
-    async (s) => (s.goal_ru.includes('открытку') ? { ok: false, problems: ['The player is already in Μυθόπολη'] } : { ok: true, problems: [] }),
+    async (s) => (s.goal_ru?.includes('открытку') ? { ok: false, problems: ['The player is already in Μυθόπολη'] } : { ok: true, problems: [] }),
     3,
   )
   assert.equal(result, drafts[1])
@@ -560,14 +564,54 @@ async function startWithDb(overrides: Partial<CityDeps>) {
 
 test('pool sizes per level', async () => {
   const { parsePoolSizes, createPool, poolCount } = await import('./pool.ts')
-  assert.deepEqual(parsePoolSizes('A1:10, A2:5,B1:3,C2:9,bad', 1), { A1: 10, A2: 5, B1: 3 })
-  assert.deepEqual(parsePoolSizes(undefined, 2), { A1: 2, A2: 2, B1: 2 })
+  assert.deepEqual(parsePoolSizes('A1:10, A2:5,B1:3,C2:9,bad,en.A1:4,ru.B1:0,de.A1:5', 1), {
+    el: { A1: 10, A2: 5, B1: 3 },
+    en: { A1: 4, A2: 2, B1: 1 },
+    ru: { A1: 3, A2: 2, B1: 0 },
+  })
+  assert.deepEqual(parsePoolSizes(undefined, 2).el, { A1: 2, A2: 2, B1: 2 })
   const db = openDb(':memory:')
   const { migrateCity } = await import('./store.ts')
   migrateCity(db)
   const scenarios = { generate: async () => validateScenario(scenario()) }
   await createPool(db, { scenarios, scenes: null, size: { A1: 4, A2: 2, B1: 1 } }).refill()
   assert.deepEqual(['A1', 'A2', 'B1'].map((l) => poolCount(db, l as never)), [4, 2, 1])
+  const asked: string[] = []
+  const multi = { generate: async (_l: string, _g: string[], _t: unknown, lang?: string) => { asked.push(lang ?? '?'); return validateScenario(scenario()) } }
+  await createPool(db, { scenarios: multi as never, scenes: null, size: parsePoolSizes('A1:4,A2:2,B1:1,en.A1:1,en.A2:0,en.B1:0,ru.A1:2,ru.A2:0,ru.B1:0', 0) }).refill()
+  assert.deepEqual(asked.sort(), ['en', 'ru', 'ru'])
+  assert.equal(poolCount(db, 'A1', 'ru'), 2)
+  const { takeFromPool } = await import('./pool.ts')
+  assert.equal(takeFromPool(db, 'A1', 'en')?.scenario.lang, 'en')
+  assert.equal(takeFromPool(db, 'A1', 'en'), null)
+})
+
+test('each learning language has its own town, game, score and hint language', async () => {
+  const generated: string[] = []
+  const { call, login, opened, close } = await start({
+    scenarios: { generate: async (_level, _goals, _time, lang) => { generated.push(lang ?? '?'); return validateScenario({ ...scenario(), goal_en: 'Ask the fisherman', goal_ru: 'Спроси рыбака' }) } },
+  })
+  const me = await login('Vadim')
+  const en = { 'X-City-Lang': 'en', 'X-City-Hint': 'ru' }
+  assert.equal((await call('GET', '/api/city', undefined, me, en)).body.city, 'Mythmouth')
+  const game = (await call('POST', '/api/city/games', { level: 'A1', lang: 'en' }, me, en)).body.game
+  assert.deepEqual(generated, ['en'])
+  assert.equal(game.lang, 'en')
+  assert.equal(game.city, 'Mythmouth')
+  assert.equal(game.goal, 'Ask the fisherman')
+  assert.equal(game.goalHint, 'Спроси рыбака')
+  assert.equal((await call('GET', '/api/city/games/current', undefined, me)).body.game, null)
+  assert.equal((await call('GET', '/api/city/games/current', undefined, me, en)).body.game.id, game.id)
+  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me, en)
+  assert.match(opened[0], /Speak ONLY English/)
+  assert.match(opened[0], /living in Mythmouth/)
+  assert.match(opened[0], /the reason: in Russian/)
+  const toEn = { 'X-City-Lang': 'en', 'X-City-Hint': 'el' }
+  const inGreek = (await call('GET', '/api/city/games/current', undefined, me, toEn)).body.game
+  assert.equal(inGreek.goalHint, 'el:Спроси рыбака')
+  assert.equal(inGreek.notebook[0].facts[0].text, 'el:на вид лет двадцать')
+  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'nobody' }, me, { 'X-City-Hint': 'en' })).body.error, 'No such resident')
+  await close()
 })
 
 test('people the resident told about are found in the transcript even without the introduce tool', async () => {

@@ -8,6 +8,7 @@ import { initialSpeakState, type SpeakState } from './speakState'
 import { initialSpellState, type SpellState } from './spell'
 import { initialState as initialWords, type RoundState } from './state'
 import { deserialize as deserializeWords, STORAGE_KEY as WORDS_V1_KEY } from './storage'
+import { isLang, otherLang, type Lang } from './city/name'
 
 export type Tab = 'words' | 'grammar' | 'mock' | 'speak' | 'spell' | 'city'
 
@@ -33,6 +34,19 @@ export interface AppState {
   grammarSub: GrammarSub
   citySpeed: number
   cityAmbience: number
+  learnLang: Lang
+  hintLang: Lang
+}
+
+const ALL_TABS: Tab[] = ['words', 'grammar', 'speak', 'spell', 'mock', 'city']
+
+export function tabsFor(learn: Lang): Tab[] {
+  return learn === 'el' ? ALL_TABS : ['city']
+}
+
+export function tabFor(tab: Tab, learn: Lang): Tab {
+  const tabs = tabsFor(learn)
+  return tabs.includes(tab) ? tab : tabs[tabs.length - 1]
 }
 
 export const CITY_SPEEDS = [0.7, 0.8, 0.9, 1, 1.1, 1.2]
@@ -61,6 +75,8 @@ export function initialAppState(): AppState {
     grammarSub: 'lessons',
     citySpeed: DEFAULT_CITY_SPEED,
     cityAmbience: DEFAULT_CITY_AMBIENCE,
+    learnLang: 'el',
+    hintLang: 'ru',
   }
 }
 
@@ -140,9 +156,11 @@ export function deserializeApp(
     parsed.tab === 'grammar' || parsed.tab === 'mock' || parsed.tab === 'speak' || parsed.tab === 'spell' || parsed.tab === 'city'
       ? parsed.tab
       : 'words'
+  const learnLang: Lang = isLang(parsed.learnLang) ? parsed.learnLang : 'el'
+  const hintLang: Lang = isLang(parsed.hintLang) && parsed.hintLang !== learnLang ? parsed.hintLang : otherLang(learnLang)
   return {
     version: 3,
-    tab,
+    tab: tabFor(tab, learnLang),
     words: deserializeWords(isObj(parsed.words) ? JSON.stringify(parsed.words) : null, words),
     grammar: parseGrammar(parsed.grammar, ids),
     mock: parseMock(parsed.mock),
@@ -154,6 +172,8 @@ export function deserializeApp(
     grammarSub: parsed.grammarSub === 'nouns' || parsed.grammarSub === 'aorist' ? parsed.grammarSub : 'lessons',
     citySpeed: CITY_SPEEDS.find((v) => v === parsed.citySpeed) ?? DEFAULT_CITY_SPEED,
     cityAmbience: CITY_AMBIENCE_LEVELS.find((v) => v === parsed.cityAmbience) ?? DEFAULT_CITY_AMBIENCE,
+    learnLang,
+    hintLang,
   }
 }
 

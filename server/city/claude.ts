@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
-import { CITY_NAME, LOGIC_RULES, LORE, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Level, type Scenario, type TimeOfDay } from './scenario.ts'
+import { langOf, logicRules, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Lang, type Level, type Scenario, type TimeOfDay } from './scenario.ts'
+import { LANGUAGE_EN, settingOf } from './settings.ts'
 
 const STORY_MODEL = process.env.CITY_STORY_MODEL || 'claude-opus-5-5'
 const HELPER_MODEL = process.env.CITY_HELPER_MODEL || 'claude-haiku-5-5'
@@ -45,16 +46,16 @@ export async function draftAndReview(
 export function claudeScenarios(apiKey: string): ScenarioGenerator {
   const client = new Anthropic({ apiKey, timeout: 90_000 })
 
-  const once = async (level: Level, recentGoals: string[], problems: string[], time?: TimeOfDay): Promise<Scenario> => {
+  const once = async (level: Level, recentGoals: string[], problems: string[], time: TimeOfDay | undefined, lang: Lang): Promise<Scenario> => {
     const response = await ask(client, STORY_MODEL, {
       max_tokens: 16000,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCENARIO_SCHEMA } },
-      messages: [{ role: 'user', content: scenarioRequest(level, recentGoals, problems, time) }],
+      messages: [{ role: 'user', content: scenarioRequest(level, recentGoals, problems, time, lang) }],
     })
     if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to write a scenario')
     if (response.stop_reason === 'max_tokens') throw new ProviderError('Claude scenario was cut off')
     const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
-    return validateScenario(JSON.parse(text))
+    return validateScenario(JSON.parse(text), lang)
   }
 
   const review = async (s: Scenario): Promise<Review> => {
@@ -64,17 +65,17 @@ export function claudeScenarios(apiKey: string): ScenarioGenerator {
       messages: [
         {
           role: 'user',
-          content: `You are the story editor of a language-learning game. A tourist who has just arrived in ${CITY_NAME} (a small fictional Greek harbour town) completes a quest by talking to townspeople.
+          content: `You are the story editor of a language-learning game. A tourist who ${settingOf(langOf(s)).arrival} in ${settingOf(langOf(s)).city} completes a quest by talking to townspeople in ${LANGUAGE_EN[langOf(s)]}.
 
-${LORE}
+${settingOf(langOf(s)).lore}
 
 Check this quest for logic problems only:
-${LOGIC_RULES}
+${logicRules(langOf(s))}
 
 Quest (JSON):
 ${JSON.stringify(s)}
 
-Is it logical and consistent? ok=true if there are no real problems. Otherwise ok=false and list each problem in one short English sentence, concrete enough to fix (e.g. "The goal asks to send a postcard to Μυθόπολη, but the player is already there"). Ignore style, wording and small details.`,
+Is it logical and consistent? ok=true if there are no real problems. Otherwise ok=false and list each problem in one short English sentence, concrete enough to fix (e.g. "The goal asks to send a postcard to ${settingOf(langOf(s)).city}, but the player is already there"). Ignore style, wording and small details.`,
         },
       ],
     })
@@ -85,11 +86,11 @@ Is it logical and consistent? ok=true if there are no real problems. Otherwise o
   }
 
   return {
-    async generate(level, recentGoals, time) {
+    async generate(level, recentGoals, time, lang = 'el') {
       let last: unknown
       for (let i = 0; i < ATTEMPTS; i++) {
         try {
-          const s = await draftAndReview((problems) => once(level, recentGoals, problems, time), review, 3)
+          const s = await draftAndReview((problems) => once(level, recentGoals, problems, time, lang), review, 3)
           if (time) s.time_of_day = time
           return s
         } catch (e) {
@@ -112,7 +113,7 @@ const MATCH_SCHEMA = {
 export function claudeFacts(apiKey: string): FactMatcher {
   const client = new Anthropic({ apiKey, timeout: 60_000 })
   return {
-    async match(speaker, lines, facts, people) {
+    async match(speaker, lines, facts, people, lang = 'el') {
       const transcript = lines.map((l) => `${l.role === 'agent' ? speaker : 'Tourist'}: ${l.text}`).join('\n')
       const list = facts.length ? facts.map((f) => `- ${f.id}: ${f.text}`).join('\n') : '- none'
       const others = people.length ? people.map((p) => `- ${p.id}: ${p.name}`).join('\n') : '- none'
@@ -122,7 +123,7 @@ export function claudeFacts(apiKey: string): FactMatcher {
         messages: [
           {
             role: 'user',
-            content: `Here is a spoken conversation in Greek between a tourist and ${speaker} (speech recognition may contain small errors).
+            content: `Here is a spoken conversation in ${LANGUAGE_EN[lang]} between a tourist and ${speaker} (speech recognition may contain small errors).
 
 ${transcript}
 
@@ -148,8 +149,15 @@ Return ids; empty lists if none.`,
   }
 }
 
+const MANY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: { items: { type: 'array', items: { type: 'string' } } },
+} as const
+
 export function claudeTranslator(apiKey: string): Translator {
-  const client = new Anthropic({ apiKey, timeout: 30_000 })
+  const client = new Anthropic({ apiKey, timeout: 60_000 })
   const run = async (system: string, text: string) => {
     const response = await ask(client, HELPER_MODEL, {
       max_tokens: 2000,
@@ -161,17 +169,36 @@ export function claudeTranslator(apiKey: string): Translator {
     return response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('').trim()
   }
   return {
-    toRussian: (greek) =>
+    translate: (text, to, from) =>
       run(
-        'Translate the Greek phrase from a spoken conversation into natural Russian. The phrase may have small speech recognition errors or mixed languages. Reply with the translation only, no quotes or comments.',
-        greek,
+        `Translate the ${from ? `${LANGUAGE_EN[from]} ` : ''}phrase from a spoken conversation into natural ${LANGUAGE_EN[to]}. The phrase may have small speech recognition errors or mixed languages. Reply with the translation only, no quotes or comments.`,
+        text,
       ),
-    toGreek: (russian) =>
-      run(
-        'Translate the Russian text into simple, natural modern Greek for a learner (A2 level). Keep names as they are in Greek. Reply with the translation only, no quotes or comments.',
-        russian,
-      ),
+    async translateMany(texts, to) {
+      if (!texts.length) return []
+      const response = await ask(client, HELPER_MODEL, {
+        max_tokens: 8000,
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: MANY_SCHEMA } },
+        messages: [
+          {
+            role: 'user',
+            content: `Translate each item into simple, natural ${LANGUAGE_EN[to]} for a language learner's game (names of people and places: transliterate them into the ${LANGUAGE_EN[to]} alphabet). Return items in the same order, exactly ${texts.length} of them.\n\n${JSON.stringify(texts)}`,
+          },
+        ],
+      })
+      if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to translate')
+      const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
+      const items = (JSON.parse(text) as { items?: unknown }).items
+      if (!Array.isArray(items) || items.length !== texts.length) throw new ProviderError('translation: wrong number of items')
+      return items.map((x) => String(x))
+    },
   }
+}
+
+const REASONS: Record<Lang, string> = {
+  ru: '«слишком длинная реплика: 4 предложения», «редкое слово "…"»',
+  en: '"too long: 4 sentences", "rare word \'…\'"',
+  el: '«πολύ μεγάλη απάντηση: 4 προτάσεις», «σπάνια λέξη "…"»',
 }
 
 const LEVEL_SCHEMA = {
@@ -184,8 +211,8 @@ const LEVEL_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['index', 'reason_ru', 'note_en'],
-        properties: { index: { type: 'integer' }, reason_ru: { type: 'string' }, note_en: { type: 'string' } },
+        required: ['index', 'reason', 'note_en'],
+        properties: { index: { type: 'integer' }, reason: { type: 'string' }, note_en: { type: 'string' } },
       },
     },
   },
@@ -194,7 +221,7 @@ const LEVEL_SCHEMA = {
 export function claudeLevels(apiKey: string): LevelChecker {
   const client = new Anthropic({ apiKey, timeout: 60_000 })
   return {
-    async check(level, lines) {
+    async check(level, lines, lang = 'el', hint = 'ru') {
       const list = lines.map((l, i) => `${i}: ${l}`).join('\n')
       const response = await ask(client, HELPER_MODEL, {
         max_tokens: 6000,
@@ -202,22 +229,19 @@ export function claudeLevels(apiKey: string): LevelChecker {
         messages: [
           {
             role: 'user',
-            content: `A Greek-speaking character talks to a learner of Greek whose level is CEFR ${level}. Rules for the character at this level:
-- A1: one short sentence (≤ 8 words) per reply, present tense / imperative / «θέλω να» only, the most frequent everyday words.
-- A2: 1-2 short sentences (≤ 12 words each), present, aorist, future with «θα», imperative, simple «να» clauses; no perfect, no passive.
-- B1: up to 2-3 sentences, everyday speech, no rare words or idioms.
-Always informal «εσύ».
+            content: `A ${LANGUAGE_EN[lang]}-speaking character talks to a learner of ${LANGUAGE_EN[lang]} whose level is CEFR ${level}. Rules for the character at this level:
+${settingOf(lang).levelRules}
 
 Character's replies (numbered):
 ${list}
 
-List only the replies that are clearly too difficult for ${level} or break the rules (too long, grammar above the level, rare words, formal «εσείς»). For each: index, reason_ru — a short reason in Russian naming the exact word or form («перфект "έχεις κάψει"», «слишком длинная реплика: 4 предложения», «редкое слово "αγχώνομαι"»), note_en — a short instruction in English for the character to avoid it next time. Ignore small things. Return an empty list if all replies fit.`,
+List only the replies that are clearly too difficult for ${level} or break the rules (too long, grammar above the level, rare words, wrong form of address). For each: index, reason — a short reason in ${LANGUAGE_EN[hint]} naming the exact word or form (e.g. ${REASONS[hint]}), note_en — a short instruction in English for the character to avoid it next time. Ignore small things. Return an empty list if all replies fit.`,
           },
         ],
       })
       if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to check the level')
       const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
-      const parsed = JSON.parse(text) as { issues?: { index: number; reason_ru: string; note_en: string }[] }
+      const parsed = JSON.parse(text) as { issues?: { index: number; reason: string; note_en: string }[] }
       return (parsed.issues ?? []).filter((x) => Number.isInteger(x.index) && x.index >= 0 && x.index < lines.length)
     },
   }

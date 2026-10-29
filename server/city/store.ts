@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import type { Level, Mood, Scenario } from './scenario.ts'
+import { anyText, normalizeScenario, type Lang, type Level, type Mood, type Scenario } from './scenario.ts'
 
 export type GameStatus = 'active' | 'won'
 
 export interface Game {
   id: string
   userId: number
+  lang: Lang
   level: Level
   scenario: Scenario
   met: string[]
@@ -20,6 +21,7 @@ export interface Game {
 interface GameRow {
   id: string
   user_id: number
+  lang: Lang
   level: Level
   scenario: string
   met: string
@@ -93,13 +95,17 @@ export function migrateCity(db: DatabaseSync): void {
   if (!cols.some((c) => c.name === 'heard')) db.exec("ALTER TABLE city_games ADD COLUMN heard TEXT NOT NULL DEFAULT '[]'")
   if (!cols.some((c) => c.name === 'reasons')) db.exec("ALTER TABLE city_games ADD COLUMN reasons TEXT NOT NULL DEFAULT '{}'")
   if (!cols.some((c) => c.name === 'moods')) db.exec("ALTER TABLE city_games ADD COLUMN moods TEXT NOT NULL DEFAULT '{}'")
+  if (!cols.some((c) => c.name === 'lang')) db.exec("ALTER TABLE city_games ADD COLUMN lang TEXT NOT NULL DEFAULT 'el'")
+  const poolCols = db.prepare('PRAGMA table_info(city_pool)').all() as { name: string }[]
+  if (!poolCols.some((c) => c.name === 'lang')) db.exec("ALTER TABLE city_pool ADD COLUMN lang TEXT NOT NULL DEFAULT 'el'")
 }
 
 const toGame = (r: GameRow): Game => ({
   id: r.id,
   userId: r.user_id,
+  lang: r.lang ?? 'el',
   level: r.level,
-  scenario: JSON.parse(r.scenario),
+  scenario: normalizeScenario({ lang: r.lang ?? 'el', ...JSON.parse(r.scenario) }),
   met: JSON.parse(r.met),
   found: JSON.parse(r.found),
   heard: JSON.parse(r.heard),
@@ -113,10 +119,12 @@ const now = () => new Date().toISOString()
 export function createGame(db: DatabaseSync, userId: number, level: Level, scenario: Scenario, presetId?: string): Game {
   const id = presetId ?? randomBytes(9).toString('base64url')
   const t = now()
-  db.prepare('INSERT INTO city_games (id, user_id, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-    id, userId, level, JSON.stringify(scenario), t, t,
+  normalizeScenario(scenario)
+  const lang = scenario.lang ?? 'el'
+  db.prepare('INSERT INTO city_games (id, user_id, lang, level, scenario, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    id, userId, lang, level, JSON.stringify(scenario), t, t,
   )
-  return { id, userId, level, scenario, met: [], found: [], heard: [], moods: {}, reasons: {}, status: 'active' }
+  return { id, userId, lang, level, scenario, met: [], found: [], heard: [], moods: {}, reasons: {}, status: 'active' }
 }
 
 export function findGame(db: DatabaseSync, userId: number, id: string): Game | undefined {
@@ -124,18 +132,18 @@ export function findGame(db: DatabaseSync, userId: number, id: string): Game | u
   return row && toGame(row)
 }
 
-export function currentGame(db: DatabaseSync, userId: number): Game | undefined {
+export function currentGame(db: DatabaseSync, userId: number, lang: Lang = 'el'): Game | undefined {
   const row = db
-    .prepare("SELECT * FROM city_games WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
-    .get(userId) as GameRow | undefined
+    .prepare("SELECT * FROM city_games WHERE user_id = ? AND lang = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1")
+    .get(userId, lang) as GameRow | undefined
   return row && toGame(row)
 }
 
-export function recentGoals(db: DatabaseSync, userId: number, limit = 10): string[] {
-  const rows = db.prepare('SELECT scenario FROM city_games WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit) as {
-    scenario: string
-  }[]
-  return rows.map((r) => (JSON.parse(r.scenario) as Scenario).goal_ru)
+export function recentGoals(db: DatabaseSync, userId: number, lang: Lang = 'el', limit = 10): string[] {
+  const rows = db
+    .prepare('SELECT scenario FROM city_games WHERE user_id = ? AND lang = ? ORDER BY created_at DESC LIMIT ?')
+    .all(userId, lang, limit) as { scenario: string }[]
+  return rows.map((r) => goalText(JSON.parse(r.scenario) as Scenario))
 }
 
 export function markMet(db: DatabaseSync, game: Game, characterId: string): void {
@@ -148,8 +156,10 @@ export function finishGame(db: DatabaseSync, game: Game): void {
   db.prepare("UPDATE city_games SET status = 'won', updated_at = ? WHERE id = ?").run(now(), game.id)
 }
 
-export function abandonActive(db: DatabaseSync, userId: number): void {
-  db.prepare("DELETE FROM city_games WHERE user_id = ? AND status = 'active' AND met = '[]'").run(userId)
+export const goalText = (s: Scenario): string => anyText(s, 'goal', ['en', 'ru'])
+
+export function abandonActive(db: DatabaseSync, userId: number, lang: Lang = 'el'): void {
+  db.prepare("DELETE FROM city_games WHERE user_id = ? AND lang = ? AND status = 'active' AND met = '[]'").run(userId, lang)
 }
 
 export function recordTalk(db: DatabaseSync, game: Game, characterId: string, provider: string): void {
@@ -179,8 +189,8 @@ export function addFound(db: DatabaseSync, game: Game, factIds: string[]): strin
   return added
 }
 
-export function allGames(db: DatabaseSync, userId: number): Game[] {
-  return (db.prepare('SELECT * FROM city_games WHERE user_id = ?').all(userId) as unknown as GameRow[]).map(toGame)
+export function allGames(db: DatabaseSync, userId: number, lang: Lang = 'el'): Game[] {
+  return (db.prepare('SELECT * FROM city_games WHERE user_id = ? AND lang = ?').all(userId, lang) as unknown as GameRow[]).map(toGame)
 }
 
 export function saveScenario(db: DatabaseSync, game: Game): void {
@@ -209,8 +219,8 @@ export function linesFor(db: DatabaseSync, game: Game, characterId: string, limi
   return rows.reverse()
 }
 
-export function everyGame(db: DatabaseSync): Game[] {
-  return (db.prepare('SELECT * FROM city_games').all() as unknown as GameRow[]).map(toGame)
+export function everyGame(db: DatabaseSync, lang: Lang = 'el'): Game[] {
+  return (db.prepare('SELECT * FROM city_games WHERE lang = ?').all(lang) as unknown as GameRow[]).map(toGame)
 }
 
 export interface LevelCheck {

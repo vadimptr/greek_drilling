@@ -1,19 +1,20 @@
 import { ProviderError, type VoiceProvider } from './providers.ts'
-import type { Age, Gender } from './scenario.ts'
+import type { Age, Gender, Lang } from './scenario.ts'
 
 export interface ElevenLabsConfig {
   apiKey: string
   agentId: string
-  voices: Partial<Record<VoiceSlot, string[]>>
+  voices: Partial<Record<Lang, Voices>>
   speed: number
 }
 
 type VoiceSlot = `${Gender}-${Age}` | Gender
+export type Voices = Partial<Record<VoiceSlot, string[]>>
 
 const AGE_FALLBACK: Record<Age, Age[]> = { young: ['young', 'middle', 'old'], middle: ['middle', 'young', 'old'], old: ['old', 'middle', 'young'] }
 
-export function parseVoices(raw: string | undefined): ElevenLabsConfig['voices'] {
-  const voices: ElevenLabsConfig['voices'] = {}
+export function parseVoices(raw: string | undefined): Voices {
+  const voices: Voices = {}
   for (const pair of (raw ?? '').split(',')) {
     const [key, ids] = pair.split('=').map((x) => x.trim())
     const list = (ids ?? '').split('|').map((x) => x.trim()).filter(Boolean)
@@ -22,7 +23,7 @@ export function parseVoices(raw: string | undefined): ElevenLabsConfig['voices']
   return voices
 }
 
-export function pickVoice(voices: ElevenLabsConfig['voices'], gender: Gender, age: Age, index: number): string | undefined {
+export function pickVoice(voices: Voices, gender: Gender, age: Age, index: number): string | undefined {
   const slots: VoiceSlot[] = [...AGE_FALLBACK[age].map((a): VoiceSlot => `${gender}-${a}`), gender]
   const list = slots.map((slot) => voices[slot]).find((l) => l && l.length)
   return list?.[index % list.length]
@@ -37,8 +38,8 @@ export function elevenLabsVoice(cfg: ElevenLabsConfig, fetchImpl: typeof fetch =
       if (!res.ok) throw new ProviderError(`elevenlabs token: HTTP ${res.status} ${await res.text().catch(() => '')}`)
       const { token } = (await res.json()) as { token?: string }
       if (!token) throw new ProviderError('elevenlabs token: empty response')
-      const { gender, age, index } = persona.voice
-      const voiceId = pickVoice(cfg.voices, gender, age, index)
+      const { gender, age, index, lang } = persona.voice
+      const voiceId = pickVoice(cfg.voices[lang] ?? {}, gender, age, index)
       return {
         provider: 'elevenlabs',
         connection: {
@@ -56,7 +57,8 @@ export function elevenLabsVoice(cfg: ElevenLabsConfig, fetchImpl: typeof fetch =
 
 export async function dropModeratedVoices(cfg: ElevenLabsConfig, fetchImpl: typeof fetch = fetch): Promise<string[]> {
   const dropped: string[] = []
-  for (const [slot, ids] of Object.entries(cfg.voices) as [VoiceSlot, string[]][]) {
+  const slots = Object.values(cfg.voices).flatMap((voices) => (Object.entries(voices) as [VoiceSlot, string[]][]).map(([slot, ids]) => ({ voices, slot, ids })))
+  for (const { voices, slot, ids } of slots) {
     const usable: string[] = []
     for (const id of ids) {
       try {
@@ -68,8 +70,8 @@ export async function dropModeratedVoices(cfg: ElevenLabsConfig, fetchImpl: type
         usable.push(id)
       }
     }
-    if (usable.length) cfg.voices[slot] = usable
-    else delete cfg.voices[slot]
+    if (usable.length) voices[slot] = usable
+    else delete voices[slot]
   }
   return dropped
 }

@@ -1,7 +1,7 @@
-import type { Level, Persona, Scenario, TimeOfDay } from './scenario.ts'
+import type { Lang, Level, Persona, Scenario, TimeOfDay } from './scenario.ts'
 
 export interface ScenarioGenerator {
-  generate(level: Level, recentGoals: string[], time?: TimeOfDay): Promise<Scenario>
+  generate(level: Level, recentGoals: string[], time?: TimeOfDay, lang?: Lang): Promise<Scenario>
 }
 
 export interface FactMatcher {
@@ -10,22 +10,23 @@ export interface FactMatcher {
     lines: { role: string; text: string }[],
     facts: { id: string; text: string }[],
     people: { id: string; name: string }[],
+    lang?: Lang,
   ): Promise<{ facts: string[]; people: string[] }>
 }
 
 export interface LevelIssue {
   index: number
-  reason_ru: string
+  reason: string
   note_en: string
 }
 
 export interface LevelChecker {
-  check(level: string, lines: string[]): Promise<LevelIssue[]>
+  check(level: string, lines: string[], lang?: Lang, hint?: Lang): Promise<LevelIssue[]>
 }
 
 export interface Translator {
-  toRussian(greek: string): Promise<string>
-  toGreek(russian: string): Promise<string>
+  translate(text: string, to: Lang, from?: Lang): Promise<string>
+  translateMany(texts: string[], to: Lang): Promise<string[]>
 }
 
 export interface VoiceSession {
