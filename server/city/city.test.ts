@@ -566,8 +566,8 @@ test('pool sizes per level', async () => {
   const { parsePoolSizes, createPool, poolCount } = await import('./pool.ts')
   assert.deepEqual(parsePoolSizes('A1:10, A2:5,B1:3,C2:9,bad,en.A1:4,ru.B1:0,de.A1:5', 1), {
     el: { A1: 10, A2: 5, B1: 3 },
-    en: { A1: 4, A2: 2, B1: 1 },
-    ru: { A1: 3, A2: 2, B1: 0 },
+    en: { A1: 4, A2: 1, B1: 1 },
+    ru: { A1: 2, A2: 1, B1: 0 },
   })
   assert.deepEqual(parsePoolSizes(undefined, 2).el, { A1: 2, A2: 2, B1: 2 })
   const db = openDb(':memory:')

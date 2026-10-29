@@ -14,7 +14,7 @@ export const randomTime = (): TimeOfDay => TIMES[Math.floor(Math.random() * TIME
 
 export type PoolSizes = Record<Lang, Record<Level, number>>
 
-export const EXTRA_POOL: Record<Level, number> = { A1: 3, A2: 2, B1: 1 }
+export const EXTRA_POOL: Record<Level, number> = { A1: 2, A2: 1, B1: 1 }
 
 export interface PoolDeps {
   scenarios: ScenarioGenerator | null
