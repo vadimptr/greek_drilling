@@ -32,6 +32,7 @@ const SUBS_KEY = 'greek_drilling.city.subs'
 const LEAVE_AFTER_SPEECH_MS = 900
 const LEAVE_AFTER_GOODBYE_MS = 300
 const FACT_SPEECH_WINDOW_MS = 8000
+const GOODBYE_HANGUP_MS = 10_000
 const WALK_MS = 1200
 const FRESH_MS = 4000
 const SCENE_POLL_MS = 2000
@@ -103,6 +104,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
   const lastSpokeRef = useRef<string | null>(null)
   const lastAgentLineRef = useRef(0)
   const pendingFactsRef = useRef<{ id: string; at: number }[]>([])
+  const moodRef = useRef<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const wonRef = useRef(false)
   const timerRef = useRef<number | undefined>(undefined)
@@ -260,6 +262,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
       if (name === 'set_mood') {
         const mood = String(params.mood ?? '')
         const reason = String(params.reason ?? '')
+        moodRef.current = mood || moodRef.current
         if (mood) void setMood(g.id, current, mood, reason).then(applyIfCurrent).catch(() => undefined)
         return 'ok'
       }
@@ -287,7 +290,17 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
         .catch(() => undefined)
       return 'ok'
     },
-    onEnd: () => finishCall(seq),
+    onSystemTool: (name) => {
+      if (seq !== callSeq.current || name !== 'end_call') return
+      const current = gameRef.current?.notebook.find((p) => p.id === currentRef.current)
+      if (moodRef.current === 'angry' || (moodRef.current === null && current?.mood === 'angry')) walkAwayRef.current = true
+      endingRef.current = true
+      leavingRef.current = true
+    },
+    onEnd: (byAgent) => {
+      if (byAgent && seq === callSeq.current && Date.now() - lastAgentLineRef.current < GOODBYE_HANGUP_MS) leavingRef.current = true
+      finishCall(seq)
+    },
     onError: (message) => {
       if (seq !== callSeq.current) return
       setError(message || t('city.dropped'))
@@ -318,6 +331,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
       setLines([])
       lastAgentLineRef.current = 0
       pendingFactsRef.current = []
+      moodRef.current = null
       modeRef.current = 'listening'
       const call = await startVoice(opened.session, handlers(seq))
       if (seq !== callSeq.current) {

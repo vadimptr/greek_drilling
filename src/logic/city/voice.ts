@@ -6,7 +6,8 @@ export interface VoiceHandlers {
   onLine(role: 'user' | 'agent', text: string): void
   onMode(mode: 'speaking' | 'listening'): void
   onTool(name: ToolName, params: Record<string, unknown>): string
-  onEnd(): void
+  onSystemTool(name: string): void
+  onEnd(byAgent: boolean): void
   onError(message: string): void
 }
 

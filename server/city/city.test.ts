@@ -162,6 +162,8 @@ test('persona speaks only Greek at the chosen level and lists contacts', () => {
   assert.match(p.systemPrompt, /id "yiannis": Γιάννης/)
   assert.match(p.systemPrompt, /Never call the tool goal_completed/)
   assert.match(p.systemPrompt, /cannot leave\. Never offer to go somewhere together/)
+  assert.match(p.systemPrompt, /ONE short goodbye[\s\S]*immediately call the tool end_call/)
+  assert.doesNotMatch(p.systemPrompt, /end_talk|walk_away/)
   assert.equal(p.language, 'el')
   assert.ok(p.keywords.includes('Μυθόπολη'))
 })
