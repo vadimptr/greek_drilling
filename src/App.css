@@ -956,9 +956,6 @@
 .verb-table { margin: 0 12px 12px; width: calc(100% - 24px); }
 .verb-pron { color: var(--muted); width: 40%; }
 .verb-form { font-weight: 600; font-size: 16px; }
-.aorist-groups { display: flex; flex-wrap: wrap; gap: 6px; }
-.aorist-group { border: 1px solid var(--border); background: var(--card); color: inherit; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
-.aorist-group-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .aorist-steps { display: flex; justify-content: center; gap: 6px; }
 .aorist-step { border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; }
 .aorist-step-active { border-color: var(--accent); color: var(--accent); }
@@ -1016,7 +1013,6 @@
   .city-name { font-size: 32px; }
   .grammar-hub > .sub-picker { align-self: flex-start; }
   .hub-body > .aorist, .aorist > .aorist-verbs, .hub-body > .lesson-list { max-width: none; }
-  .aorist > .aorist-groups { justify-content: center; }
 
   .lesson-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
   .lesson-list > .resume-card, .lesson-list > .lesson-level { grid-column: 1 / -1; }

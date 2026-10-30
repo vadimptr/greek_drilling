@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristGroup, type AoristVerb } from '../data/aorist'
 import { AORIST_THEORY } from '../data/aorist/theory'
-import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, personsOf, sentencesOf, verbsOf, type AoristTask, type GroupFilter } from '../logic/aorist'
+import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, personsOf, sentencesOf, verbsOf, type AoristTask } from '../logic/aorist'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
 import { initialSpeakState, type SpeakState } from '../logic/speakState'
@@ -27,31 +27,10 @@ interface Props {
   onChange: (next: SpeakState) => void
 }
 
-const GROUP_KEY = 'greek_drilling.aoristGroup'
-
-const FILTERS: { id: GroupFilter; label: string }[] = [{ id: 'all', label: 'Все' }, ...AORIST_GROUPS.map((g) => ({ id: g.id, label: g.label }))]
-
-function loadFilter(): GroupFilter {
-  try {
-    const v = localStorage.getItem(GROUP_KEY)
-    return FILTERS.some((f) => f.id === v) ? (v as GroupFilter) : 'all'
-  } catch {
-    return 'all'
-  }
-}
-
-function saveFilter(f: GroupFilter) {
-  try {
-    localStorage.setItem(GROUP_KEY, f)
-  } catch {
-    return
-  }
-}
-
 const groupTitle = (g: AoristVerb['group']) => AORIST_GROUPS.find((x) => x.id === g)!.title
 
-function nextTask(state: SpeakState, filter: GroupFilter): AoristTask | null {
-  const word = pickNext(state, aoristWords(filter))
+function nextTask(state: SpeakState): AoristTask | null {
+  const word = pickNext(state, aoristWords('all'))
   const verb = word ? aoristVerb(word.id) : undefined
   return verb ? makeAoristTask(verb) : null
 }
@@ -60,13 +39,6 @@ const hasProgress = (s: SpeakState) => s.learned.length > 0 || Object.keys(s.wea
 
 export function AoristScreen({ state, onChange }: Props) {
   const [view, setView] = useState<View>(() => (hasProgress(state) ? 'train' : 'theory'))
-  const [filter, setFilter] = useState<GroupFilter>(loadFilter)
-
-  const changeFilter = (f: GroupFilter) => {
-    setFilter(f)
-    saveFilter(f)
-  }
-
   useEffect(() => {
     document.querySelector('.screen')?.scrollTo({ top: 0 })
   }, [view])
@@ -81,9 +53,8 @@ export function AoristScreen({ state, onChange }: Props) {
         ))}
       </div>
       {view === 'theory' && <Theory onTrain={() => setView('train')} />}
-      {view !== 'theory' && <GroupPicker filter={filter} onChange={changeFilter} />}
-      {view === 'verbs' && <VerbList state={state} filter={filter} />}
-      {view === 'train' && <Trainer key={filter} state={state} onChange={onChange} filter={filter} />}
+      {view === 'verbs' && <VerbList state={state} />}
+      {view === 'train' && <Trainer state={state} onChange={onChange} />}
     </div>
   )
 }
@@ -109,26 +80,13 @@ function Theory({ onTrain }: { onTrain: () => void }) {
   )
 }
 
-function GroupPicker({ filter, onChange }: { filter: GroupFilter; onChange: (f: GroupFilter) => void }) {
-  return (
-    <div className="aorist-groups">
-      {FILTERS.map((f) => (
-        <button key={f.id} className={f.id === filter ? 'aorist-group aorist-group-active' : 'aorist-group'} onClick={() => onChange(f.id)}>
-          {f.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function VerbList({ state, filter }: { state: SpeakState; filter: GroupFilter }) {
+function VerbList({ state }: { state: SpeakState }) {
   const [open, setOpen] = useState<number | null>(null)
   const learned = new Set(state.learned)
-  const groups = AORIST_GROUPS.filter((g) => filter === 'all' || g.id === filter)
   return (
     <main className="aorist-verbs">
       <p className="sec-text">Нажми на глагол, чтобы увидеть все формы. ✓ — усвоен, ● — на повторении.</p>
-      {groups.map((g) => {
+      {AORIST_GROUPS.map((g) => {
         const verbs = verbsOf(g.id)
         return (
           <section key={g.id} className="aorist-verbs">
@@ -235,9 +193,9 @@ function isPicked(o: StepOption, picks: Picks): boolean {
   )
 }
 
-function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
-  const words = aoristWords(filter)
-  const [task, setTask] = useState<AoristTask | null>(() => nextTask(state, filter))
+function Trainer({ state, onChange }: Props) {
+  const words = useMemo(() => aoristWords('all'), [])
+  const [task, setTask] = useState<AoristTask | null>(() => nextTask(state))
   const [picks, setPicks] = useState<Picks>({})
   const [stepIndex, setStepIndex] = useState(0)
   const timer = useRef<number | null>(null)
@@ -250,17 +208,17 @@ function Trainer({ state, onChange, filter }: Props & { filter: GroupFilter }) {
   useEffect(() => clearTimer, [])
 
   useEffect(() => {
-    if (task === null && !isWin(state, words)) setTask(nextTask(state, filter))
-  }, [state, task, words, filter])
+    if (task === null && !isWin(state, words)) setTask(nextTask(state))
+  }, [state, task, words])
 
   const advance = useCallback(
     (next: SpeakState) => {
       clearTimer()
       setPicks({})
       setStepIndex(0)
-      setTask(nextTask(next, filter))
+      setTask(nextTask(next))
     },
-    [filter],
+    [],
   )
 
   const restart = () => {
