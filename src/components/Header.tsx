@@ -30,14 +30,16 @@ export function Header({ left, right, subtitle, progress, onSettings, user, onAc
           <span key={left.bump ? String(left.value) : 'l'} className={left.bump ? 'stat-value score-bump' : 'stat-value'}>
             {left.value}
           </span>
+          <span className="stat-label">{left.label}</span>
         </div>
         <div className="stat" aria-label={right.label}>
           <span className="stat-icon">{right.icon}</span>
           <span className="stat-value">{right.value}</span>
+          <span className="stat-label">{right.label}</span>
         </div>
         {user !== null ? (
           <button className="icon-btn user-btn" onClick={onAccount} aria-label={`${t('header.account')}: ${user}`}>
-            <span className="user-btn-icon">👤</span>
+            <span className="user-btn-icon avatar">{user.slice(0, 1).toUpperCase()}</span>
             <span className="user-btn-name">{user}</span>
           </button>
         ) : (

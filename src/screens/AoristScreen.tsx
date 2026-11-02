@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristGroup, type AoristVerb } from '../data/aorist'
 import { AORIST_THEORY } from '../data/aorist/theory'
 import { aoristVerb, aoristWords, fillBlank, makeAoristTask, paradigm, personsOf, sentencesOf, verbsOf, type AoristTask } from '../logic/aorist'
@@ -37,21 +38,25 @@ function nextTask(state: SpeakState): AoristTask | null {
 
 const hasProgress = (s: SpeakState) => s.learned.length > 0 || Object.keys(s.weak).length > 0
 
-export function AoristScreen({ state, onChange }: Props) {
+export function AoristScreen({ state, onChange, toolbar }: Props & { toolbar?: HTMLElement | null }) {
   const [view, setView] = useState<View>(() => (hasProgress(state) ? 'train' : 'theory'))
   useEffect(() => {
     document.querySelector('.screen')?.scrollTo({ top: 0 })
   }, [view])
 
+  const views = (
+    <div className="segmented seg-3 aorist-views">
+      {VIEWS.map((v) => (
+        <button key={v.id} className={v.id === view ? 'seg seg-active' : 'seg'} onClick={() => setView(v.id)}>
+          {v.label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div className="aorist">
-      <div className="segmented seg-3 aorist-views">
-        {VIEWS.map((v) => (
-          <button key={v.id} className={v.id === view ? 'seg seg-active' : 'seg'} onClick={() => setView(v.id)}>
-            {v.label}
-          </button>
-        ))}
-      </div>
+      {toolbar ? createPortal(views, toolbar) : views}
       {view === 'theory' && <Theory onTrain={() => setView('train')} />}
       {view === 'verbs' && <VerbList state={state} />}
       {view === 'train' && <Trainer state={state} onChange={onChange} />}

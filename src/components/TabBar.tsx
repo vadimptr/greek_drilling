@@ -15,6 +15,10 @@ export function TabBar({ tab, learn, onChange }: Props) {
   const label = (id: Tab) => (id === 'city' ? CITY_NAMES[learn] : t(`tab.${id}` as UiKey))
   return (
     <nav className="tabbar" aria-label={t('tab.aria')}>
+      <div className="brand" aria-hidden="true">
+        <span className="brand-logo">Λ</span>
+        <span className="brand-name">Language Drilling</span>
+      </div>
       {tabsFor(learn).map((id) => (
         <button
           key={id}

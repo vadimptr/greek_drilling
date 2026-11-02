@@ -66,6 +66,7 @@ export default function App() {
   const account = useAccount(app, setApp, boot.user)
   const [cityAllowed, setCityAllowed] = useState<boolean | null>(null)
   const [cityTotal, setCityTotal] = useState(0)
+  const [hubTools, setHubTools] = useState<HTMLDivElement | null>(null)
   const [storyMs, setStoryMs] = useState(40_000)
   const [cityNeedsCode, setCityNeedsCode] = useState(false)
   const [cityCheck, setCityCheck] = useState(0)
@@ -195,7 +196,10 @@ export default function App() {
         )}
         {app.tab === 'grammar' && (
           <div className="grammar-hub">
-            <SubPicker value={grammarSub} level={level} onChange={setGrammarSub} />
+            <div className="hub-head">
+              <SubPicker value={grammarSub} level={level} onChange={setGrammarSub} />
+              <div className="hub-tools" ref={setHubTools} />
+            </div>
             <div className="hub-body">
               {grammarSub === 'lessons' && (
                 <GrammarScreen state={app.grammar} level={level} onChange={(grammar) => setApp((a) => ({ ...a, grammar }))} />
@@ -204,7 +208,7 @@ export default function App() {
                 <NounsScreen state={app.nouns} onChange={(nouns) => setApp((a) => ({ ...a, nouns }))} />
               )}
               {grammarSub === 'aorist' && (
-                <AoristScreen state={app.aorist} onChange={(aorist) => setApp((a) => ({ ...a, aorist }))} />
+                <AoristScreen state={app.aorist} toolbar={hubTools} onChange={(aorist) => setApp((a) => ({ ...a, aorist }))} />
               )}
             </div>
           </div>
