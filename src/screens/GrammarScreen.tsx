@@ -149,33 +149,30 @@ export function GrammarScreen({ state, level, onChange }: Props) {
     )
   }
 
+  if (activeLesson && question && state.active && ruleOpen) {
+    return (
+      <LessonExplanation
+        lesson={activeLesson}
+        primaryLabel="Понятно, к упражнению"
+        onPrimary={() => setRuleOpen(false)}
+        onBack={() => setRuleOpen(false)}
+        backLabel="← К упражнению"
+      />
+    )
+  }
+
   if (activeLesson && question && state.active) {
     return (
-      <>
-        <Exercise
-          question={question}
-          attempt={attempt}
-          remaining={state.active.queue.length}
-          feedback={feedback}
-          onSelect={select}
-          onNext={next}
-          onShowRule={() => setRuleOpen(true)}
-          onExit={exit}
-        />
-        {ruleOpen && (
-          <div className="sheet-backdrop" onClick={() => setRuleOpen(false)}>
-            <div className="sheet sheet-tall" onClick={(e) => e.stopPropagation()}>
-              <LessonExplanation
-                lesson={activeLesson}
-                primaryLabel="Понятно"
-                onPrimary={() => setRuleOpen(false)}
-                onBack={() => setRuleOpen(false)}
-                backLabel="← Назад"
-              />
-            </div>
-          </div>
-        )}
-      </>
+      <Exercise
+        question={question}
+        attempt={attempt}
+        remaining={state.active.queue.length}
+        feedback={feedback}
+        onSelect={select}
+        onNext={next}
+        onShowRule={() => setRuleOpen(true)}
+        onExit={exit}
+      />
     )
   }
 

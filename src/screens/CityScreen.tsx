@@ -10,6 +10,9 @@ import { useAmbience } from '../logic/city/useAmbience'
 import { CITY_NAMES, type Lang } from '../logic/city/name'
 import { translate, useT, useUi } from '../logic/i18n'
 import { Player, Recorder } from '../logic/city/recorder'
+import townEl from '../assets/city/el.svg'
+import townEn from '../assets/city/en.svg'
+import townRu from '../assets/city/ru.svg'
 import type { Level } from '../types/word'
 
 type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'talking' | 'walking'
@@ -29,6 +32,7 @@ interface Props {
   onTotal: (total: number) => void
 }
 
+const TOWN_ART: Record<Lang, string> = { el: townEl, en: townEn, ru: townRu }
 const SUBS_KEY = 'greek_drilling.city.subs'
 const WALK_MS = 1200
 const MIN_SPEECH_MS = 400
@@ -491,10 +495,11 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
             {scene ? (
               <img key={scene} className="city-art-img" src={scene} alt="" />
             ) : (
-              <div className={phase === 'generating' || phase === 'walking' ? 'city-art-sea city-art-sea-busy' : 'city-art-sea'}>
-                <span className="city-art-sun" />
-                <span className="city-art-wave" />
-              </div>
+              <img
+                className={phase === 'generating' || phase === 'walking' ? 'city-art-town city-art-town-busy' : 'city-art-town'}
+                src={TOWN_ART[lang]}
+                alt=""
+              />
             )}
           </div>
 

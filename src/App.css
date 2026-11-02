@@ -124,7 +124,6 @@
 .ex-speak { background: none; border: none; font-size: 16px; padding: 0 4px; }
 .ex-ru { font-size: 14px; color: var(--muted); }
 .explain-cta { margin-top: 8px; }
-.sheet-tall { max-height: 85dvh; overflow-y: auto; }
 
 /* grammar: exercise */
 .exercise-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -588,31 +587,9 @@
 }
 .city-art-img { width: 100%; height: 100%; object-fit: cover; animation: scene-in 0.9s ease; }
 @keyframes scene-in { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
-.city-art-sea {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(180deg, #fde7c4 0%, #fbd3a5 30%, #a5d8f3 52%, #3b9bd1 70%, #1e6fa8 100%);
-  overflow: hidden;
-}
-.city-art-sun {
-  position: absolute;
-  left: 50%;
-  top: 30%;
-  width: 22%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #fff7d6 0%, #ffd27a 55%, rgba(255, 190, 90, 0) 72%);
-}
-.city-art-wave {
-  position: absolute;
-  inset: 52% -10% 0;
-  background: repeating-linear-gradient(175deg, rgba(255, 255, 255, 0.16) 0 2px, transparent 2px 22px);
-  animation: waves 9s linear infinite;
-}
-.city-art-sea-busy .city-art-wave { animation-duration: 3s; }
-@keyframes waves { from { transform: translateX(0); } to { transform: translateX(-60px); } }
+.city-art-town { width: 100%; height: 100%; object-fit: cover; animation: scene-in 0.9s ease; }
+.city-art-town-busy { animation: town-drift 14s ease-in-out infinite alternate; }
+@keyframes town-drift { from { transform: scale(1); } to { transform: scale(1.06) translateX(-1.5%); } }
 
 .city-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; padding: 0 12%; text-align: center; pointer-events: none; }
 .city-overlay > * { pointer-events: auto; }
