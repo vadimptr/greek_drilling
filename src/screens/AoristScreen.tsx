@@ -180,7 +180,7 @@ interface StepOption {
 function stepOptions(step: Step, task: AoristTask): StepOption[] {
   if (step === 'ru') return task.options.map((o) => ({ key: o, label: o, right: o === task.answer, pick: { ru: o } }))
   if (step === 'group')
-    return AORIST_GROUPS.map((g) => ({ key: g.id, label: g.title, right: g.id === task.verb.group, pick: { group: g.id } }))
+    return AORIST_GROUPS.map((g) => ({ key: g.id, label: g.title.split(' — ')[0], right: g.id === task.verb.group, pick: { group: g.id } }))
   const persons = personsOf(task.verb, task.form)
   return PRONOUNS.map((p, i) => ({ key: p, label: `${p} · ${PRONOUN_RU[i]}`, right: persons.includes(i), pick: { person: i } }))
 }
