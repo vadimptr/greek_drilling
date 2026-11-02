@@ -134,78 +134,96 @@ export function SpeakScreen({ state, hint, words, onChange }: Props) {
     advance(next)
   }
 
+  const listenRef = useRef(listen)
+  listenRef.current = listen
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      e.preventDefault()
+      void listenRef.current()
+    }
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onUp)
+    }
+  }, [])
+
   const won = isWin(state, words)
   const micBlocked = mic === 'denied' || mic === 'unsupported'
   const busy = phase === 'listening' || phase === 'processing'
 
-  const cardClass =
-    phase === 'correct' ? 'speak-card speak-card-ok' : phase === 'wrong' ? 'speak-card speak-card-bad' : 'speak-card'
+  const promptClass =
+    phase === 'correct' ? 'trainer-prompt trainer-prompt-ok' : phase === 'wrong' ? 'trainer-prompt trainer-prompt-bad' : 'trainer-prompt'
 
   return (
-    <main className="speak">
-      {word && (
-        <div key={`${word.id}-${phase === 'correct' || phase === 'wrong' ? phase : ''}`} className={cardClass}>
-          <button className="speak-word" onClick={() => setInfoOpen(true)} aria-label="Показать сведения о слове">
-            {hint === 'el' ? word.el : word.ru}
-          </button>
-          {hint === 'el' && (
-            <>
-              <div className="speak-translit">{transliterate(word.el)}</div>
-              <div className="speak-ru">{word.ru}</div>
-            </>
-          )}
-          {hint === 'ru' && phase === 'wrong' && <div className="speak-reveal">{word.el}</div>}
-        </div>
-      )}
-
-      <div className="speak-status" aria-live="polite">
-        {phase === 'idle' && !micBlocked && 'Нажми на микрофон и произнеси слово'}
-        {phase === 'idle' && mic === 'denied' && 'Доступ к микрофону запрещён. Разреши его в настройках браузера для этого сайта.'}
-        {phase === 'idle' && mic === 'unsupported' && 'Браузер не даёт доступ к микрофону. Открой сайт в Safari или Chrome по https.'}
-        {phase === 'listening' && 'Слушаю… говори'}
-        {phase === 'processing' && 'Распознаю…'}
-        {phase === 'correct' && <span className="speak-ok">✓ Верно! {heard && <span className="speak-heard">«{heard}»</span>}</span>}
-        {phase === 'wrong' && (
-          <span className="speak-bad">
-            ✗ Услышал: <span className="speak-heard">«{heard || '…'}»</span>
-          </span>
-        )}
-        {phase === 'unclear' && 'Не расслышал, попробуй ещё раз'}
-        {phase === 'unavailable' && 'Сервер распознавания недоступен, попробуй позже'}
-      </div>
-
-      <div className="speak-controls">
-        <button
-          className={phase === 'listening' ? 'mic-btn mic-listening' : 'mic-btn'}
-          style={{ ['--level' as string]: Math.min(1, level * 12) }}
-          onClick={listen}
-          disabled={!word || micBlocked || phase === 'processing' || phase === 'correct'}
-          aria-label={phase === 'listening' ? 'Остановить запись' : 'Сказать слово'}
-        >
-          {phase === 'processing' ? '…' : phase === 'listening' ? '■' : '🎤'}
-        </button>
-        <div className="speak-actions">
-          {phase === 'wrong' ? (
-            <>
-              <button className="primary-btn" onClick={listen}>
-                🎤 Ещё раз
+    <main className="speak trainer">
+      <div className="trainer-card">
+        {word && (
+          <div key={`${word.id}-${phase === 'correct' || phase === 'wrong' ? phase : ''}`} className={promptClass}>
+            <span className="prompt-anchor">
+              <button className="prompt-word speak-word" onClick={() => setInfoOpen(true)} aria-label="Показать сведения о слове">
+                {hint === 'el' ? word.el : word.ru}
               </button>
-              <button className="secondary-btn" onClick={nextAfterWrong}>
-                Дальше
-              </button>
-            </>
-          ) : (
-            <>
               {speechAvailable && (
-                <button className="secondary-btn" onClick={() => word && speak(word.el)} disabled={!word || busy}>
-                  🔊 Послушать
+                <button className="speak-btn prompt-speak" onClick={() => speak(word.el)} disabled={busy} aria-label="Послушать">
+                  🔊
                 </button>
               )}
+            </span>
+            {hint === 'el' && (
+              <>
+                <div className="speak-translit">{transliterate(word.el)}</div>
+                <div className="speak-ru">{word.ru}</div>
+              </>
+            )}
+            {hint === 'ru' && phase === 'wrong' && <div className="speak-reveal">{word.el}</div>}
+          </div>
+        )}
+
+        <div className="city-dock speak-dock">
+          <div className="speak-status" aria-live="polite">
+            {phase === 'idle' && !micBlocked && 'Нажми на микрофон или пробел и произнеси слово'}
+            {phase === 'idle' && mic === 'denied' && 'Доступ к микрофону запрещён. Разреши его в настройках браузера для этого сайта.'}
+            {phase === 'idle' && mic === 'unsupported' && 'Браузер не даёт доступ к микрофону. Открой сайт в Safari или Chrome по https.'}
+            {phase === 'listening' && 'Слушаю… говори'}
+            {phase === 'processing' && 'Распознаю…'}
+            {phase === 'correct' && <span className="speak-ok">✓ Верно! {heard && <span className="speak-heard">«{heard}»</span>}</span>}
+            {phase === 'wrong' && (
+              <span className="speak-bad">
+                ✗ Услышал: <span className="speak-heard">«{heard || '…'}»</span>
+              </span>
+            )}
+            {phase === 'unclear' && 'Не расслышал, попробуй ещё раз'}
+            {phase === 'unavailable' && 'Сервер распознавания недоступен, попробуй позже'}
+          </div>
+          <div className="city-dock-row">
+            <div className="city-dock-side">
               <button className="secondary-btn" onClick={skip} disabled={!word || busy}>
                 Пропустить
               </button>
-            </>
-          )}
+            </div>
+            <button
+              className={phase === 'listening' ? 'mic-btn mic-listening' : 'mic-btn'}
+              style={{ ['--level' as string]: Math.min(1, level * 12) }}
+              onClick={listen}
+              disabled={!word || micBlocked || phase === 'processing' || phase === 'correct'}
+              aria-label={phase === 'listening' ? 'Остановить запись' : 'Сказать слово'}
+            >
+              {phase === 'processing' ? '…' : phase === 'listening' ? '■' : '🎤'}
+            </button>
+            <div className="city-dock-side">
+              {phase === 'wrong' && (
+                <button className="secondary-btn" onClick={nextAfterWrong}>
+                  Дальше
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

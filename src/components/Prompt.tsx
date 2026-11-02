@@ -15,14 +15,16 @@ export function Prompt({ word, direction, canSpeak, onTapWord, onSpeak }: Props)
   return (
     <main className="prompt">
       <div className="prompt-row">
-        <button key={word.id} className="prompt-word" onClick={onTapWord} aria-label="Показать сведения о слове">
-          {promptOf(word, direction)}
-        </button>
-        {greekShown && canSpeak && (
-          <button className="speak-btn" onClick={onSpeak} aria-label="Озвучить">
-            🔊
+        <span className="prompt-anchor">
+          <button key={word.id} className="prompt-word" onClick={onTapWord} aria-label="Показать сведения о слове">
+            {promptOf(word, direction)}
           </button>
-        )}
+          {greekShown && canSpeak && (
+            <button className="speak-btn prompt-speak" onClick={onSpeak} aria-label="Озвучить">
+              🔊
+            </button>
+          )}
+        </span>
       </div>
       {greekShown && <div className="prompt-translit">{transliterate(word.el)}</div>}
     </main>
