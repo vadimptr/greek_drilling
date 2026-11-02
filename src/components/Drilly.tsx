@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DRILLY_EMOTIONS, missed, onDrilly, reaction, type DrillyEmotion, type DrillyOutfit } from '../logic/drilly'
+import { DRILLY_EMOTIONS, drillyImage, missed, onDrilly, reaction, type DrillyEmotion, type DrillyOutfit } from '../logic/drilly'
 import { useT } from '../logic/i18n'
 
 const LAST_KEY = 'greek_drilling.lastActive'
@@ -21,8 +21,6 @@ function writeLast(at: number): void {
     return
   }
 }
-
-const src = (outfit: DrillyOutfit, emotion: DrillyEmotion) => `/drilly/${outfit}/${emotion}.png`
 
 export function Drilly({ outfit = 'base' }: { outfit?: DrillyOutfit }) {
   const t = useT()
@@ -60,12 +58,9 @@ export function Drilly({ outfit = 'base' }: { outfit?: DrillyOutfit }) {
           <img
             key={e}
             className={e === emotion ? 'drilly-img drilly-img-on' : 'drilly-img'}
-            src={src(outfit, e)}
+            src={drillyImage(outfit, e)}
             alt=""
             draggable={false}
-            onError={(ev) => {
-              if (outfit !== 'base') ev.currentTarget.src = src('base', e)
-            }}
           />
         ))}
         {emotion === 'celebrate' && (

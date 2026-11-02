@@ -23,6 +23,7 @@ import { AORIST_VERBS } from './data/aorist'
 import { SubPicker, subsFor } from './components/grammar/SubPicker'
 import { WordsScreen } from './screens/WordsScreen'
 import { CityScreen } from './screens/CityScreen'
+import { outfitForLevel } from './logic/drilly'
 import { cityAccess, setCityLangs } from './logic/city/api'
 import { CITY_NAMES, otherLang, type Lang } from './logic/city/name'
 import { translate, UiContext } from './logic/i18n'
@@ -188,6 +189,7 @@ export default function App() {
       <Header left={left} right={right} subtitle={subtitle} progress={progress} onSettings={() => setSettingsOpen(true)}
         user={account.user}
         onAccount={() => setAccountOpen(true)}
+        outfit={outfitForLevel(level)}
       />
 
       <div className="screen">

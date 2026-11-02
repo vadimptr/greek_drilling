@@ -1,5 +1,6 @@
 import { useT } from '../logic/i18n'
 import { Drilly } from './Drilly'
+import type { DrillyOutfit } from '../logic/drilly'
 
 export interface Stat {
   icon: string
@@ -18,15 +19,16 @@ interface Props {
   onSettings: () => void
   user: string | null
   onAccount: () => void
+  outfit?: DrillyOutfit
 }
 
-export function Header({ left, right, subtitle, progress, onSettings, user, onAccount }: Props) {
+export function Header({ left, right, subtitle, progress, onSettings, user, onAccount, outfit }: Props) {
   const t = useT()
   const pct = progress === null ? 0 : Math.round(Math.min(1, Math.max(0, progress)) * 100)
   return (
     <header className="header">
       <div className="header-row">
-        <Drilly />
+        <Drilly outfit={outfit} />
         <div className="stat stat-left" aria-label={left.label}>
           <span className="stat-icon">{left.icon}</span>
           <span key={left.bump ? String(left.value) : 'l'} className={left.bump ? 'stat-value score-bump' : 'stat-value'}>

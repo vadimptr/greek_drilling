@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CELEBRATE_EVERY, MISS_AFTER_MS, missed, reaction } from './drilly'
+import { CELEBRATE_EVERY, drillyImage, MISS_AFTER_MS, missed, outfitForLevel, reaction } from './drilly'
 
 describe('drilly', () => {
   it('is happy on a right answer and thoughtful on a mistake', () => {
@@ -17,5 +17,12 @@ describe('drilly', () => {
     expect(missed(null, now)).toBe(false)
     expect(missed(now - MISS_AFTER_MS + 1000, now)).toBe(false)
     expect(missed(now - MISS_AFTER_MS - 1000, now)).toBe(true)
+  })
+
+  it('wears the outfit of the level and falls back to the base pose for emotions the outfit has no picture for', () => {
+    expect(outfitForLevel('A1')).toBe('base')
+    expect(outfitForLevel('B1')).toBe('b1')
+    expect(drillyImage('b1', 'idle')).toBe('/drilly/b1/idle.png')
+    expect(drillyImage('b1', 'happy')).toBe('/drilly/base/happy.png')
   })
 })

@@ -1053,9 +1053,10 @@
 
 /* drilly */
 .drilly { position: relative; flex: none; display: flex; align-items: center; }
-.drilly-figure { position: relative; width: 40px; height: 40px; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 10%); overflow: visible; }
-.drilly-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; opacity: 0; transition: opacity 150ms ease; user-select: none; pointer-events: none; }
+.drilly-figure { position: relative; width: 54px; height: 54px; margin: -6px -4px -6px -8px; overflow: visible; }
+.drilly-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; filter: drop-shadow(0 2px 3px rgb(0 0 0 / 12%)); transition: opacity 150ms ease; user-select: none; pointer-events: none; }
 .drilly-img-on { opacity: 1; }
+.drilly-figure { transform-origin: 50% 94%; }
 .drilly-idle { animation: drilly-breathe 3.2s ease-in-out infinite; }
 .drilly-happy { animation: drilly-hop 0.6s cubic-bezier(.3,1.6,.5,1); }
 .drilly-thinking { animation: drilly-tilt 0.9s ease-in-out; }
@@ -1088,7 +1089,7 @@
 
 @media (min-width: 960px) {
   .header-row > .drilly { grid-area: dr; gap: 12px; padding: 4px 0 6px; min-height: 96px; }
-  .header-row > .drilly .drilly-figure { width: 88px; height: 88px; border-radius: 22px; }
+  .header-row > .drilly .drilly-figure { width: 124px; height: 124px; margin: -14px -10px -6px -14px; }
   .header-row > .drilly .drilly-bubble { position: relative; left: auto; top: auto; max-width: none; flex: 1; width: auto; }
   .header-row > .drilly .drilly-bubble::before { left: -6px; top: 50%; margin-top: -5px; border-top: none; border-bottom: 1px solid var(--border); }
 
@@ -1129,13 +1130,7 @@
     overflow-y: auto;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
-  .brand-logo {
-    width: 34px; height: 34px; border-radius: 10px; flex: none;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #9333ea));
-    color: #fff; font-size: 19px; font-weight: 800;
-    box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
-  }
+  .brand-logo { width: 36px; height: 36px; flex: none; filter: drop-shadow(0 4px 8px rgb(48 36 200 / 30%)); }
   .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
   .tab { position: relative; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 8px 10px; font-size: 15px; font-weight: 500; color: var(--muted); border-radius: 12px; transition: background 0.15s, color 0.15s; }
   .tab-icon {
