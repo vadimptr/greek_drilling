@@ -24,8 +24,8 @@ const UI = {
   'header.signIn': { ru: 'Войти', en: 'Sign in', el: 'Σύνδεση' },
   'header.account': { ru: 'Аккаунт', en: 'Account', el: 'Λογαριασμός' },
   'header.settings': { ru: 'Настройки', en: 'Settings', el: 'Ρυθμίσεις' },
-  'header.cityPoints': { ru: 'Очки за факты', en: 'Points for facts', el: 'Πόντοι για γεγονότα' },
-  'header.level': { ru: 'Уровень', en: 'Level', el: 'Επίπεδο' },
+  'header.cityPoints': { ru: 'очки', en: 'points', el: 'πόντοι' },
+  'header.level': { ru: 'уровень', en: 'level', el: 'επίπεδο' },
   'header.citySubtitle': {
     ru: '{city} · жители говорят на уровне {level}',
     en: '{city} · residents speak at level {level}',

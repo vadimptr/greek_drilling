@@ -134,41 +134,41 @@ export default function App() {
   let progress: number | null
 
   if (app.tab === 'words') {
-    left = { icon: '⚡', value: app.words.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.words.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.words.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.words.bestStreak, label: 'рекорд' }
     const pool = wordPool(level)
     const learned = pool.filter((w) => app.words.learned.includes(w.id)).length
     const weak = pool.filter((w) => w.id in app.words.weak).length
     subtitle = `${level} · выучено ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'grammar' && grammarSub === 'nouns') {
-    left = { icon: '⚡', value: app.nouns.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.nouns.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.nouns.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.nouns.bestStreak, label: 'рекорд' }
     subtitle = `Склонение: усвоено ${app.nouns.learned.length} / ${NOUNS.length} · слабых ${Object.keys(app.nouns.weak).length}`
     progress = app.nouns.learned.length / NOUNS.length
   } else if (app.tab === 'grammar' && grammarSub === 'aorist') {
-    left = { icon: '⚡', value: app.aorist.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.aorist.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.aorist.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.aorist.bestStreak, label: 'рекорд' }
     subtitle = `Аорист: усвоено ${app.aorist.learned.length} / ${AORIST_VERBS.length} · слабых ${Object.keys(app.aorist.weak).length}`
     progress = app.aorist.learned.length / AORIST_VERBS.length
   } else if (app.tab === 'grammar') {
-    left = { icon: '⚡', value: app.grammar.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.grammar.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.grammar.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.grammar.bestStreak, label: 'рекорд' }
     const lessons = lessonsUpTo(level)
     const passed = lessons.filter((l) => app.grammar.completed.includes(l.id)).length
     subtitle = `${level} · уроков пройдено ${passed} / ${lessons.length}`
     progress = passed / lessons.length
   } else if (app.tab === 'speak') {
-    left = { icon: '⚡', value: app.speak.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.speak.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.speak.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.speak.bestStreak, label: 'рекорд' }
     const pool = wordPool(level)
     const learned = pool.filter((w) => app.speak.learned.includes(w.id)).length
     const weak = pool.filter((w) => w.id in app.speak.weak).length
     subtitle = `${level} · произнесено ${learned} / ${pool.length} · слабых ${weak}`
     progress = learned / pool.length
   } else if (app.tab === 'spell') {
-    left = { icon: '⚡', value: app.spell.score, label: 'Очки', bump: true }
-    right = { icon: '🏆', value: app.spell.bestStreak, label: 'Лучший стрик' }
+    left = { icon: '⚡', value: app.spell.score, label: 'очки', bump: true }
+    right = { icon: '🏆', value: app.spell.bestStreak, label: 'рекорд' }
     const pool = wordPool(level)
     const learned = pool.filter((w) => app.spell.learned.includes(w.id)).length
     const weak = pool.filter((w) => w.id in app.spell.weak).length

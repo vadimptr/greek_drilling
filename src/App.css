@@ -1124,26 +1124,38 @@
 
   .header {
     grid-area: header;
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 42px;
-    grid-template-areas: 's1 s1 s2 s2' 'pr pr pr pr' 'lb lb lb lb' 'us us us gear';
-    gap: 8px;
-    padding: 14px 14px 18px;
+    grid-template-areas: 'lb lb lb lb' 'pr pr pr pr' 's1 s1 s2 s2' 'us us us gear';
+    column-gap: 8px;
+    row-gap: 0;
+    padding: 16px 24px 18px;
+  }
+  .header::before {
+    content: '';
+    grid-area: 1 / 1 / 4 / -1;
+    margin: -12px -12px -14px;
+    border-radius: 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
   }
   .header-row { display: contents; }
   .header-row .stat-left { grid-area: s1; }
   .header-row .stat-right { grid-area: s2; margin-left: 0; }
   .header .stat {
-    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center;
-    background: var(--bg); border-radius: 12px; padding: 8px 10px; font-size: 18px;
+    position: relative;
+    display: flex; align-items: baseline; gap: 5px; min-width: 0;
+    background: none; padding: 0; margin-top: 10px; font-size: 15px;
   }
-  .header .stat-icon { grid-row: 1 / 3; font-size: 18px; }
-  .header .stat-value { font-size: 17px; line-height: 1.1; }
-  .header .stat-label { display: block; font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .header .progress { grid-area: pr; margin-top: 4px; }
-  .header .progress-label { grid-area: lb; font-size: 12px; line-height: 1.35; }
-  .header-row .user-btn, .header-row .login-btn { grid-area: us; min-width: 0; max-width: none; width: 100%; justify-content: flex-start; margin-top: 8px; height: 42px; }
-  .header-row > .icon-btn:last-child { grid-area: gear; margin-top: 8px; height: 42px; width: 42px; }
+  .header .stat-icon { font-size: 14px; align-self: center; }
+  .header .stat-value { font-size: 16px; font-weight: 700; min-width: 0; }
+  .header .stat-label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .header .progress { position: relative; grid-area: pr; height: 8px; margin-top: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .header .progress-fill { border-radius: 4px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #22c55e)); min-width: 8px; }
+  .header .progress-label { position: relative; grid-area: lb; font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35; }
+  .header-row .user-btn, .header-row .login-btn { grid-area: us; min-width: 0; max-width: none; width: calc(100% + 10px); margin-left: -10px; justify-content: flex-start; margin-top: 28px; height: 42px; }
+  .header-row > .icon-btn:last-child { grid-area: gear; margin-top: 28px; margin-left: 10px; height: 42px; width: 42px; }
   .header-row .user-btn-name { overflow: hidden; text-overflow: ellipsis; }
 
   .screen > *, .hub-body > *, .aorist > * { width: 100%; max-width: 760px; margin-inline: auto; }
