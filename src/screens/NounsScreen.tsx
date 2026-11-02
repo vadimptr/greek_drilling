@@ -4,7 +4,7 @@ import { WORDS } from '../data/words'
 import {
   CASE_LABEL,
   CASE_SHORT,
-  CASES,
+  CASE_ORDER,
   checkIdentify,
   describeAnalyses,
   GENDER_SHORT,
@@ -123,12 +123,30 @@ export function NounsScreen({ state, onChange }: Props) {
   const cardClass = result === null ? 'nouns-card' : result ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
   const answered = result !== null
 
+  const valid = task.kind === 'identify' ? task.valid : []
+  const nOk = valid.some((a) => a.n === choice.n)
+  const cOk = valid.some((a) => a.c === choice.c && (!nOk || a.n === choice.n))
+  const gOk = choice.g === gender
+  const caseRight = (v: Case) => valid.some((a) => a.c === v && (!nOk || a.n === choice.n))
+  const numRight = (v: Num) => valid.some((a) => a.n === v && (!cOk || a.c === choice.c))
+
   const segClass = <T extends string>(value: T, chosen: T | null, correct: (v: T) => boolean) => {
     if (!answered) return value === chosen ? 'seg seg-active' : 'seg'
-    if (correct(value)) return 'seg seg-ok'
-    if (value === chosen) return 'seg seg-bad'
-    return 'seg'
+    if (value === chosen) return correct(value) ? 'seg seg-ok' : 'seg seg-bad'
+    return correct(value) ? 'seg seg-hint' : 'seg seg-dim'
   }
+
+  const segText = <T extends string>(value: T, chosen: T | null, correct: (v: T) => boolean, label: string) =>
+    answered && value === chosen ? `${correct(value) ? '✓' : '✗'} ${label}` : label
+
+  const rowLabel = (title: string, ok: boolean) =>
+    answered ? (
+      <div className="nouns-row-label">
+        {title} <span className={ok ? 'speak-ok' : 'speak-bad'}>{ok ? '✓ верно' : '✗ ошибка'}</span>
+      </div>
+    ) : (
+      <div className="nouns-row-label">{title}</div>
+    )
 
   return (
     <main className="nouns">
@@ -171,41 +189,41 @@ export function NounsScreen({ state, onChange }: Props) {
         {task.kind === 'identify' && (
           <>
             <div className="nouns-row">
-              <div className="nouns-row-label">Род</div>
+              {rowLabel('Род', gOk)}
               <div className="segmented seg-3">
                 {GENDERS.map((g) => (
                   <button key={g} className={segClass(g, choice.g, (v) => v === gender)} disabled={answered} onClick={() => setChoice({ ...choice, g })}>
-                    {GENDER_SHORT[g]}
+                    {segText(g, choice.g, (v) => v === gender, GENDER_SHORT[g])}
                   </button>
                 ))}
               </div>
             </div>
             <div className="nouns-row">
-              <div className="nouns-row-label">Падеж</div>
+              {rowLabel('Падеж', cOk)}
               <div className="segmented seg-3">
-                {CASES.map((c) => (
+                {CASE_ORDER.map((c) => (
                   <button
                     key={c}
-                    className={segClass(c, choice.c, (v) => task.valid.some((a) => a.c === v && (choice.n === null || a.n === choice.n)))}
+                    className={segClass(c, choice.c, caseRight)}
                     disabled={answered}
                     onClick={() => setChoice({ ...choice, c })}
                   >
-                    {CASE_SHORT[c]}
+                    {segText(c, choice.c, caseRight, CASE_SHORT[c])}
                   </button>
                 ))}
               </div>
             </div>
             <div className="nouns-row">
-              <div className="nouns-row-label">Число</div>
+              {rowLabel('Число', nOk)}
               <div className="segmented">
                 {NUMS.map((n) => (
                   <button
                     key={n}
-                    className={segClass(n, choice.n, (v) => task.valid.some((a) => a.n === v && (choice.c === null || a.c === choice.c || !task.valid.some((b) => b.c === choice.c))))}
+                    className={segClass(n, choice.n, numRight)}
                     disabled={answered}
                     onClick={() => setChoice({ ...choice, n })}
                   >
-                    {NUM_SHORT[n]}
+                    {segText(n, choice.n, numRight, NUM_SHORT[n])}
                   </button>
                 ))}
               </div>

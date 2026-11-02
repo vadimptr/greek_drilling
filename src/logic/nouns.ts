@@ -13,6 +13,7 @@ export interface Analysis {
 
 export const GENDERS: Gender[] = ['m', 'f', 'n']
 export const CASES: Case[] = ['nom', 'gen', 'acc']
+export const CASE_ORDER: Case[] = ['nom', 'acc', 'gen']
 export const NUMS: Num[] = ['sg', 'pl']
 
 export const GENDER_LABEL: Record<Gender, string> = { m: 'мужской', f: 'женский', n: 'средний' }
@@ -66,7 +67,7 @@ export function analyses(entry: NounEntry, shown: string): Analysis[] {
 
 export function describeAnalyses(entry: NounEntry, list: Analysis[]): string {
   const g = GENDER_LABEL[genderOf(entry)]
-  const cases = [...new Set(list.map((a) => a.c))].map((c) => CASE_LABEL[c]).join(' или ')
+  const cases = CASE_ORDER.filter((c) => list.some((a) => a.c === c)).map((c) => CASE_LABEL[c]).join(' или ')
   const nums = [...new Set(list.map((a) => a.n))].map((n) => NUM_LABEL[n]).join(' или ')
   return `${g} род, ${cases} падеж, ${nums} число`
 }

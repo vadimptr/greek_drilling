@@ -881,13 +881,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 14px;
   padding: 12px 0 12px;
   text-align: center;
 }
 .nouns-card {
-  flex: 1;
+  flex: 0 1 auto;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -907,6 +908,15 @@
 .seg-off:disabled { opacity: 0.35; cursor: not-allowed; }
 .seg-ok { background: var(--ok); color: #fff; font-weight: 600; }
 .seg-bad { background: var(--bad); color: #fff; font-weight: 600; }
+.nouns .segmented { background: transparent; padding: 0; }
+.nouns .seg { background: var(--card); border: 1px solid var(--border); font-size: 15px; padding: 12px 6px; cursor: pointer; }
+.nouns .seg:hover:not(:disabled) { border-color: var(--accent); }
+.nouns .seg-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.nouns .seg-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+.nouns .seg-bad { background: var(--bad); border-color: var(--bad); color: #fff; }
+.nouns .seg-hint { border: 2px solid var(--ok); color: var(--ok); font-weight: 600; }
+.nouns .seg-dim { opacity: 0.45; }
+.nouns-row-label .speak-ok, .nouns-row-label .speak-bad { font-weight: 600; margin-left: 4px; }
 .spell-bottom .primary-btn:disabled { opacity: 0.45; }
 
 /* account */
