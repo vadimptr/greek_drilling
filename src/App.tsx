@@ -3,7 +3,7 @@ import './App.css'
 import { lessonsUpTo } from './data/grammar'
 import { wordPool } from './data/levels'
 import { variantLevel } from './data/mock'
-import { initialAppState, tabFor, type AppState, type GrammarSub, type SpeakHint, type Tab } from './logic/appState'
+import { initialAppState, tabFor, type AppState, type SpeakHint } from './logic/appState'
 import { NOUNS } from './data/nouns'
 import { canSpeak } from './logic/speech'
 import { initialState as initialWords } from './logic/state'
@@ -20,7 +20,8 @@ import { SpellScreen } from './screens/SpellScreen'
 import { NounsScreen } from './screens/NounsScreen'
 import { AoristScreen } from './screens/AoristScreen'
 import { AORIST_VERBS } from './data/aorist'
-import { SubPicker, subsFor } from './components/grammar/SubPicker'
+import { ModeSwitch } from './components/ModeSwitch'
+import { groupOf, navOf, routeOf, type NavGroup, type NavId } from './logic/nav'
 import { WordsScreen } from './screens/WordsScreen'
 import { CityScreen } from './screens/CityScreen'
 import { outfitForLevel } from './logic/drilly'
@@ -95,7 +96,12 @@ export default function App() {
     if (tabFor(app.tab, app.learnLang) !== app.tab) setApp((a) => ({ ...a, tab: tabFor(a.tab, a.learnLang) }))
   }, [app.tab, app.learnLang])
 
-  const setTab = (tab: Tab) => setApp((a) => ({ ...a, tab: tabFor(tab, a.learnLang) }))
+  const [lastInGroup, setLastInGroup] = useState<Partial<Record<NavGroup, NavId>>>({})
+  const goTo = (id: NavId) => {
+    const r = routeOf(id)
+    setLastInGroup((l) => ({ ...l, [groupOf(id)]: id }))
+    setApp((a) => ({ ...a, tab: tabFor(r.tab, a.learnLang), grammarSub: r.sub ?? a.grammarSub }))
+  }
   const changeLearnLang = (learnLang: Lang) =>
     setApp((a) => ({ ...a, learnLang, hintLang: otherLang(learnLang, a.hintLang), tab: tabFor(a.tab, learnLang) }))
   const changeHintLang = (hintLang: Lang) => setApp((a) => (hintLang === a.learnLang ? a : { ...a, hintLang }))
@@ -103,7 +109,6 @@ export default function App() {
   const changeAutoSpeak = (autoSpeak: boolean) => setApp((a) => ({ ...a, words: { ...a.words, autoSpeak } }))
   const changeLevel = (level: Level) => setApp((a) => ({ ...a, words: { ...a.words, level } }))
   const changeSpeakHint = (speakHint: SpeakHint) => setApp((a) => ({ ...a, speakHint }))
-  const setGrammarSub = (grammarSub: GrammarSub) => setApp((a) => ({ ...a, grammarSub }))
   const resetAll = () => {
     setApp((a) => ({
       ...initialAppState(),
@@ -120,7 +125,8 @@ export default function App() {
   }
 
   const level = app.words.level
-  const grammarSub = subsFor(level).some((s) => s.id === app.grammarSub) ? app.grammarSub : 'lessons'
+  const grammarSub = app.grammarSub
+  const current = navOf(app.tab, grammarSub)
 
   let left: Stat
   let right: Stat
@@ -193,13 +199,13 @@ export default function App() {
       />
 
       <div className="screen">
+        {app.learnLang === 'el' && <ModeSwitch current={current} learn={app.learnLang} onChange={goTo} />}
         {app.tab === 'words' && (
           <WordsScreen state={app.words} onChange={(words) => setApp((a) => ({ ...a, words }))} />
         )}
         {app.tab === 'grammar' && (
           <div className="grammar-hub">
             <div className="hub-head">
-              <SubPicker value={grammarSub} level={level} onChange={setGrammarSub} />
               <div className="hub-tools" ref={setHubTools} />
             </div>
             <div className="hub-body">
@@ -227,7 +233,7 @@ export default function App() {
         {app.tab === 'mock' && <MockScreen key={level} state={app.mock} level={level} onChange={(mock) => setApp((a) => ({ ...a, mock }))} />}
       </div>
 
-      <TabBar tab={app.tab} learn={app.learnLang} onChange={setTab} />
+      <TabBar current={current} learn={app.learnLang} lastInGroup={lastInGroup} onChange={goTo} />
 
       <AccountSheet
         open={accountOpen}

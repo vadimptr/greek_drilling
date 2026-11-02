@@ -22,10 +22,11 @@
 .hub-body > .lesson-list, .hub-body > .explain, .hub-body > .done, .hub-body > .nouns, .hub-body > .prompt { flex: 1; }
 
 /* tab bar */
+.nav-mobile { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.nav-desktop { display: none; }
+.mode-switch { margin: 2px 0 6px; flex: none; }
+.hub-head:has(.hub-tools:empty) { display: none; }
 .tabbar {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
   border-top: 1px solid var(--border);
   background: var(--card);
   padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
@@ -848,36 +849,7 @@
 .hub-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 10px 0 14px; }
 .hub-tools { flex: 1 1 280px; min-width: 0; }
 .hub-tools:empty { display: none; }
-.sub-picker {
-  align-self: flex-start;
-  margin: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  font-size: 15px;
-  font-weight: 600;
-}
 .sub-picker-caret { color: var(--muted); font-size: 13px; }
-.sub-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--card);
-}
-.sub-option-active { border-color: var(--accent); }
-.sub-option-icon { font-size: 24px; }
-.sub-option-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-.sub-option-title { font-weight: 600; font-size: 16px; }
-.sub-option-desc { font-size: 13px; color: var(--muted); }
-.sub-option-check { color: var(--accent); font-weight: 700; }
 
 /* nouns section */
 .nouns {
@@ -1048,9 +1020,9 @@
 .trainer-answers .option { position: relative; display: flex; align-items: center; justify-content: center; font-weight: 600; }
 .option-key { display: none; }
 .trainer-next { width: 100%; min-height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; }
-.aorist-views { background: color-mix(in srgb, var(--text) 6%, transparent); padding: 4px; border-radius: 12px; gap: 4px; }
-.aorist-views .seg { color: var(--muted); font-weight: 600; cursor: pointer; }
-.aorist-views .seg-active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.aorist-views, .mode-switch { background: color-mix(in srgb, var(--text) 6%, transparent); padding: 4px; border-radius: 12px; gap: 4px; }
+.aorist-views .seg, .mode-switch .seg { color: var(--muted); font-weight: 600; cursor: pointer; }
+.aorist-views .seg-active, .mode-switch .seg-active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
 
 
 /* drilly */
@@ -1132,6 +1104,10 @@
     overflow-y: auto;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+  .nav-mobile, .mode-switch { display: none; }
+  .nav-desktop { display: flex; flex-direction: column; gap: 16px; }
+  .nav-group { display: flex; flex-direction: column; gap: 2px; }
+  .nav-group-title { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding: 0 10px 4px; }
   .brand-logo { width: 36px; height: 36px; flex: none; filter: drop-shadow(0 2px 6px rgb(0 0 0 / 14%)); }
   .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
   .tab { position: relative; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 8px 10px; font-size: 15px; font-weight: 500; color: var(--muted); border-radius: 12px; transition: background 0.15s, color 0.15s; }
