@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { anyText, normalizeScenario, type Lang, type Level, type Mood, type Scenario } from './scenario.ts'
+import type { Cost } from './costs.ts'
 
 export type GameStatus = 'active' | 'won'
 
@@ -81,6 +82,17 @@ export function migrateCity(db: DatabaseSync): void {
       user_id INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS city_costs (
+      id INTEGER PRIMARY KEY,
+      game_id TEXT NOT NULL REFERENCES city_games(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL,
+      character_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      usd REAL NOT NULL,
+      detail TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS ix_city_costs_game ON city_costs(game_id);
     CREATE TABLE IF NOT EXISTS city_lines (
       id INTEGER PRIMARY KEY,
       game_id TEXT NOT NULL REFERENCES city_games(id) ON DELETE CASCADE,
@@ -248,4 +260,15 @@ export function recordStory(db: DatabaseSync, userId: number): void {
 export function storiesSince(db: DatabaseSync, userId: number, since: Date): number {
   const row = db.prepare('SELECT COUNT(*) AS n FROM city_story_log WHERE user_id = ? AND created_at >= ?').get(userId, since.toISOString()) as { n: number }
   return row.n
+}
+
+export function recordCost(db: DatabaseSync, game: Game, characterId: string, kind: string, cost: Cost): void {
+  const { usd, ...detail } = cost
+  db.prepare('INSERT INTO city_costs (game_id, user_id, character_id, kind, usd, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    game.id, game.userId, characterId, kind, usd, JSON.stringify(detail), now(),
+  )
+}
+
+export function gameCost(db: DatabaseSync, game: Game): number {
+  return (db.prepare('SELECT COALESCE(SUM(usd), 0) AS usd FROM city_costs WHERE game_id = ?').get(game.id) as { usd: number }).usd
 }

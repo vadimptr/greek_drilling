@@ -2,19 +2,20 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { DatabaseSync } from 'node:sqlite'
 import type { UserRow } from '../db.ts'
 import { nameKey } from '../db.ts'
-import { HttpError, readJson, send } from '../http.ts'
+import { HttpError, readBody, readJson, send } from '../http.ts'
 import { issue, readCookie, verify } from '../session.ts'
-import { timingSafeEqual } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { addClaude, addCost, addStt, addTts, DEFAULT_PRICES, noCost, type Cost, type Prices } from './costs.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceKey, ambienceKeysOf, ambienceOf, type AmbienceStore } from './ambience.ts'
 import { createPool, randomTime, takeFromPool } from './pool.ts'
-import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator, type VoiceProvider } from './providers.ts'
-import { anyText, buildPersona, card, factsOf, isLang, LANGS, MOODS, nameOf, tellableBy, textOf, type Lang, type Level, type Mood, type TextField } from './scenario.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type SpeechProvider, type Talker, type Translator } from './providers.ts'
+import { anyText, buildPersona, card, factsOf, isLang, LANGS, MOODS, nameOf, tellableBy, textOf, type Lang, type Level, type Persona, type TextField } from './scenario.ts'
 import { settingOf } from './settings.ts'
 import { say, type MessageKey } from './messages.ts'
 import {
-  abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
-  recordStory, recordTalk, storiesSince, talksSince, type Game,
+  abandonActive, addFound, addHeard, addLevelCheck, addLines, allGames, everyGame, gameCost, recentLevelNotes, type LevelCheck, linesFor, saveScenario, setMood, createGame, currentGame, findGame, finishGame, markMet, migrateCity, recentGoals,
+  recordCost, recordStory, recordTalk, storiesSince, talksSince, type Game,
 } from './store.ts'
 import type { PoolSizes } from './pool.ts'
 
@@ -28,16 +29,39 @@ export interface CityDeps {
   facts: FactMatcher | null
   translator: Translator | null
   levels?: LevelChecker | null
-  voice: VoiceProvider | null
+  speech: SpeechProvider | null
+  talker: Talker | null
+  prices?: Prices
   scenes: SceneStore | null
   ambience?: AmbienceStore | null
 }
 
 const LEVELS: Level[] = ['A1', 'A2', 'B1']
-const MAX_LINES = 200
 const MAX_LINE = 2000
 const MAX_TRANSLATE = 500
 const CACHE_SIZE = 1000
+const MAX_AUDIO = 2 * 1024 * 1024
+const MAX_TURNS = 60
+const TALK_TTL_MS = 2 * 3600_000
+
+type TalkLine = { role: 'user' | 'agent'; text: string }
+
+interface TalkSession {
+  id: string
+  gameId: string
+  userId: number
+  characterId: string
+  cameFrom: string | null
+  metBefore: boolean
+  previous: TalkLine[]
+  lines: TalkLine[]
+  speed?: number
+  cost: Cost
+  busy: boolean
+  touched: number
+}
+
+const usd = (c: Cost) => Math.round(c.usd * 1e6) / 1e6
 
 export function stripTags(text: string): string {
   return text.replace(/\[[^\]\n]{1,40}\]/g, ' ').replace(/\s{2,}/g, ' ').trim()
@@ -208,7 +232,10 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
     return fail(req, 502, e instanceof ProviderError ? 'aiDown' : 'aiError')
   }
 
-  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|lines|facts|mood|scene|introduce|complete)$/
+  const gameRoute = /^\/api\/city\/games\/([A-Za-z0-9_-]{1,32})\/(talk|scene)$/
+  const talkRoute = /^\/api\/city\/talks\/([A-Za-z0-9_-]{8,32})\/(say|leave)$/
+  const prices = deps.prices ?? DEFAULT_PRICES
+  const talks = new Map<string, TalkSession>()
 
   const translations = new Map<string, string>()
   const translate = async (text: string, to: Lang, from?: Lang): Promise<string> => {
@@ -274,6 +301,115 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
     addFound(db, game, ids.filter((id) => allowedIds.has(id)))
     const goals = factsOf(game.scenario).filter((f) => f.goal)
     if (game.status === 'active' && goals.length && goals.every((f) => game.found.includes(f.id))) finishGame(db, game)
+  }
+
+  const personaFor = (game: Game, session: TalkSession, hint: Lang): Persona =>
+    buildPersona(game.scenario, session.characterId, game.level, {
+      met: session.metBefore ? game.met : game.met.filter((id) => id !== session.characterId),
+      cameFrom: session.cameFrom,
+      mood: game.moods[session.characterId] ?? 'friendly',
+      previous: session.previous,
+      levelNotes: recentLevelNotes(db, game, 6),
+      hint,
+    })
+
+  const speakLine = async (persona: Persona, session: TalkSession, raw: string, cost: Cost) => {
+    const text = stripTags(raw)
+    if (!text) return { text, audio: null as string | null }
+    const spoken = await deps.speech!.speak(text, persona.voice, session.speed)
+    addTts(cost, prices, spoken.chars)
+    return { text, audio: spoken.audio.toString('base64') }
+  }
+
+  const sayTurn = async (game: Game, session: TalkSession, audio: Buffer, type: string, declaredSeconds: number, hint: Lang) => {
+    const cost = noCost()
+    const heard = await deps.speech!.transcribe(audio, type, game.lang)
+    addStt(cost, prices, Math.max(declaredSeconds, heard.seconds))
+    const said = stripTags(heard.text).slice(0, MAX_LINE)
+    if (!said || game.status !== 'active') {
+      addCost(session.cost, cost)
+      recordCost(db, game, session.characterId, 'turn', cost)
+      return { heard: said, reply: null, ended: false, walkedAway: false, cost: usd(cost), total: usd(session.cost), spent: gameCost(db, game) }
+    }
+    session.lines.push({ role: 'user', text: said })
+    const answer = await deps.talker!.reply(personaFor(game, session, hint).systemPrompt, session.lines)
+    answer.usage.forEach((u) => addClaude(cost, prices, u))
+    let ended = false
+    for (const tool of answer.tools) {
+      const arg = (k: string) => (typeof tool.input[k] === 'string' ? (tool.input[k] as string) : '')
+      if (tool.name === 'reveal_fact') discover(game, session.characterId, [arg('fact_id')])
+      if (tool.name === 'introduce' && arg('character_id') !== session.characterId && game.scenario.characters.some((c) => c.id === arg('character_id')))
+        addHeard(db, game, [arg('character_id')])
+      if (tool.name === 'set_mood') {
+        const mood = MOODS.find((x) => x === arg('mood'))
+        if (mood) setMood(db, game, session.characterId, mood, arg('reason').trim().slice(0, 120))
+      }
+      if (tool.name === 'goal_completed' && session.characterId === game.scenario.solver_id && game.status === 'active') finishGame(db, game)
+      if (tool.name === 'end_call') ended = true
+    }
+    const persona = personaFor(game, session, hint)
+    const reply = await speakLine(persona, session, answer.text, cost)
+    const fresh: TalkLine[] = [{ role: 'user', text: said }]
+    if (reply.text) {
+      session.lines.push({ role: 'agent', text: reply.text })
+      fresh.push({ role: 'agent', text: reply.text })
+    }
+    addLines(db, game, session.characterId, fresh)
+    addCost(session.cost, cost)
+    recordCost(db, game, session.characterId, 'turn', cost)
+    const walkedAway = ended && game.moods[session.characterId] === 'angry'
+    return { heard: said, reply: { ...reply, cost: usd(cost) }, ended, walkedAway, cost: usd(cost), total: usd(session.cost), spent: gameCost(db, game) }
+  }
+
+  const review = async (game: Game, session: TalkSession, hint: Lang) => {
+    const cost = noCost()
+    const meter = (u: Parameters<typeof addClaude>[2]) => addClaude(cost, prices, u)
+    const lines = session.lines
+    const character = game.scenario.characters.find((c) => c.id === session.characterId)!
+    const open = tellableBy(game.scenario, session.characterId).filter((f) => !game.found.includes(f.id))
+    const agentLines = lines.filter((l) => l.role === 'agent').map((l) => l.text)
+    const spoke = lines.some((l) => l.role === 'user')
+    const inBook = new Set(notebookIds(game))
+    const strangers = game.scenario.characters.filter((c) => c.id !== session.characterId && !inBook.has(c.id))
+    const matching =
+      deps.facts && spoke && (open.length || strangers.length) && agentLines.length
+        ? deps.facts
+            .match(
+              nameOf(game.scenario, character),
+              lines,
+              open.map((f) => ({ id: f.id, text: f.detail ?? anyText(f, 'text', ['en']) })),
+              strangers.map((c) => ({ id: c.id, name: `${nameOf(game.scenario, c)} (${textOf(c, 'role', 'en') ?? anyText(c, 'role')})` })),
+              game.lang,
+              meter,
+            )
+            .then((found) => {
+              discover(game, session.characterId, found.facts)
+              addHeard(db, game, found.people)
+            })
+            .catch((e) => console.error(e))
+        : Promise.resolve()
+    const checking: Promise<LevelCheck | null> =
+      deps.levels && spoke && agentLines.length
+        ? deps.levels
+            .check(game.level, agentLines, game.lang, hint, meter)
+            .then((issues) => {
+              const check = {
+                level: game.level,
+                total: agentLines.length,
+                issues: issues.map((i) => ({ text: agentLines[i.index], reason: i.reason, note: i.note_en })),
+              }
+              addLevelCheck(db, game, session.characterId, check)
+              return check
+            })
+            .catch((e) => {
+              console.error(e)
+              return null
+            })
+        : Promise.resolve(null)
+    const [, check] = await Promise.all([matching, checking])
+    addCost(session.cost, cost)
+    if (cost.usd > 0) recordCost(db, game, session.characterId, 'review', cost)
+    return { check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) }, cost }
   }
 
   return async function handle(req: IncomingMessage, res: ServerResponse, path: string, user: UserRow | undefined): Promise<boolean> {
@@ -394,6 +530,39 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
       return true
     }
 
+    const tm = talkRoute.exec(path)
+    if (method === 'POST' && tm) {
+      const u = requireAllowed(user, req)
+      const now = Date.now()
+      for (const [id, t] of talks) if (now - t.touched > TALK_TTL_MS) talks.delete(id)
+      const session = talks.get(tm[1])
+      if (!session || session.userId !== u.id) return fail(req, 410, 'talkGone')
+      const game = loadGame(req, u, session!.gameId)
+      const hint = hintOf(req)
+      session!.touched = now
+      if (tm[2] === 'leave') {
+        talks.delete(session!.id)
+        const { check, cost } = await review(game, session!, hint)
+        send(res, 200, { game: view(game, hint), check, cost: usd(cost), total: usd(session!.cost), spent: gameCost(db, game) })
+        return true
+      }
+      if (session!.busy) return fail(req, 409, 'talkBusy')
+      if (session!.lines.length >= MAX_TURNS * 2) return fail(req, 429, 'talkLimit')
+      const type = String(req.headers['content-type'] ?? '').split(';')[0].trim()
+      if (!type.startsWith('audio/') && type !== 'video/webm') return fail(req, 415, 'noSpeech')
+      const audio = await readBody(req, MAX_AUDIO)
+      if (audio.length < 200) return fail(req, 400, 'noSpeech')
+      const declared = Number(req.headers['x-audio-ms'])
+      session!.busy = true
+      try {
+        const turn = await sayTurn(game, session!, audio, type, Number.isFinite(declared) ? Math.min(60, Math.max(0, declared / 1000)) : 0, hint).catch(providerFailure(req))
+        send(res, 200, { ...turn, game: view(game, hint) })
+      } finally {
+        session!.busy = false
+      }
+      return true
+    }
+
     const m = gameRoute.exec(path)
     if (method !== 'POST' || !m) return false
     const u = requireAllowed(user, req)
@@ -405,117 +574,50 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
     if (!found) return fail(req, 400, 'noResident')
     const character = found!
 
-    if (m[2] === 'talk') {
-      if (game.status !== 'active') fail(req, 409, 'done')
-      if (!deps.voice) fail(req, 503, 'noVoice')
-      if (!reachable(game).has(characterId)) fail(req, 409, 'unknownPlace')
-      const resume = body.resume === 'voice' || body.resume === 'tap' ? body.resume : undefined
-      if (resume && !game.met.includes(characterId)) fail(req, 409, 'notMet')
-      if (!resume && talksSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= deps.dailyTalks) fail(req, 429, 'talkLimit')
-      const from = typeof body.from === 'string' && game.met.includes(body.from) ? body.from : null
-      const persona = buildPersona(game.scenario, characterId, game.level, {
-        met: game.met,
-        cameFrom: from,
-        mood: game.moods[characterId] ?? 'friendly',
-        previous: linesFor(db, game, characterId, 16),
-        levelNotes: recentLevelNotes(db, game, 6),
-        resume,
-        hint,
-      })
-      if (typeof body.speed === 'number' && Number.isFinite(body.speed)) persona.speed = Math.min(1.2, Math.max(0.7, body.speed))
-      const session = await deps.voice!.open(persona).catch(providerFailure(req))
-      if (!resume) recordTalk(db, game, characterId, deps.voice!.id)
-      void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day, game.lang)
-      markMet(db, game, characterId)
-      send(res, 200, { character: card(game.scenario, character, hint), session, game: view(game, hint) })
-      return true
-    }
-
-    if (m[2] === 'lines') {
-      const raw = Array.isArray(body.lines) ? body.lines.slice(0, MAX_LINES) : []
-      const lines = raw
-        .filter((l): l is { role: string; text: string } => typeof l?.text === 'string' && (l.role === 'user' || l.role === 'agent'))
-        .map((l) => ({ role: l.role, text: stripTags(l.text).slice(0, MAX_LINE) }))
-        .filter((l) => l.text)
-      addLines(db, game, characterId, lines)
-      const open = tellableBy(game.scenario, characterId).filter((f) => !game.found.includes(f.id))
-      const agentLines = lines.filter((l) => l.role === 'agent').map((l) => l.text)
-      const inBook = new Set(notebookIds(game))
-      const strangers = game.scenario.characters.filter((c) => c.id !== characterId && !inBook.has(c.id))
-      const matching =
-        deps.facts && (open.length || strangers.length) && agentLines.length
-          ? deps.facts
-              .match(
-                nameOf(game.scenario, character),
-                lines,
-                open.map((f) => ({ id: f.id, text: f.detail ?? anyText(f, 'text', ['en']) })),
-                strangers.map((c) => ({ id: c.id, name: `${nameOf(game.scenario, c)} (${textOf(c, 'role', 'en') ?? anyText(c, 'role')})` })),
-                game.lang,
-              )
-              .then((found) => {
-                discover(game, characterId, found.facts)
-                addHeard(db, game, found.people)
-              })
-              .catch((e) => console.error(e))
-          : Promise.resolve()
-      const checking: Promise<LevelCheck | null> =
-        deps.levels && agentLines.length
-          ? deps.levels
-              .check(game.level, agentLines, game.lang, hint)
-              .then((issues) => {
-                const check = {
-                  level: game.level,
-                  total: agentLines.length,
-                  issues: issues.map((i) => ({ text: agentLines[i.index], reason: i.reason, note: i.note_en })),
-                }
-                addLevelCheck(db, game, characterId, check)
-                return check
-              })
-              .catch((e) => {
-                console.error(e)
-                return null
-              })
-          : Promise.resolve(null)
-      const [, check] = await Promise.all([matching, checking])
-      send(res, 200, { game: view(game, hint), check: check && { ...check, issues: check.issues.map(({ note: _n, ...i }) => i) } })
-      return true
-    }
-
-    if (m[2] === 'introduce') {
-      if (!game.met.includes(characterId)) fail(req, 409, 'notMet')
-      const target = typeof body.target === 'string' ? body.target : ''
-      if (target !== characterId && game.scenario.characters.some((c) => c.id === target)) addHeard(db, game, [target])
-      send(res, 200, { game: view(game, hint) })
-      return true
-    }
-
     if (m[2] === 'scene') {
       void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day, game.lang)
       send(res, 200, { game: view(game, hint) })
       return true
     }
 
-    if (m[2] === 'mood') {
-      if (!game.met.includes(characterId)) fail(req, 409, 'notMet')
-      const mood = MOODS.find((x) => x === body.mood)
-      if (!mood) fail(req, 400, 'unknownMood')
-      const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 120) : ''
-      setMood(db, game, characterId, mood as Mood, reason)
-      send(res, 200, { game: view(game, hint) })
-      return true
+    if (game.status !== 'active') fail(req, 409, 'done')
+    if (!deps.speech || !deps.talker) fail(req, 503, 'noVoice')
+    if (!reachable(game).has(characterId)) fail(req, 409, 'unknownPlace')
+    if (talksSince(db, u.id, new Date(Date.now() - 24 * 3600_000)) >= deps.dailyTalks) fail(req, 429, 'talkLimit')
+    for (const [id, t] of talks) if (t.userId === u.id) talks.delete(id)
+    const session: TalkSession = {
+      id: randomBytes(12).toString('base64url'),
+      gameId: game.id,
+      userId: u.id,
+      characterId,
+      cameFrom: typeof body.from === 'string' && game.met.includes(body.from) ? body.from : null,
+      metBefore: game.met.includes(characterId),
+      previous: linesFor(db, game, characterId, 16) as TalkLine[],
+      lines: [],
+      speed: typeof body.speed === 'number' && Number.isFinite(body.speed) ? Math.min(1.2, Math.max(0.7, body.speed)) : undefined,
+      cost: noCost(),
+      busy: false,
+      touched: Date.now(),
     }
-
-    if (m[2] === 'facts') {
-      if (!game.met.includes(characterId)) fail(req, 409, 'notMet')
-      const ids = Array.isArray(body.factIds) ? body.factIds.filter((x): x is string => typeof x === 'string').slice(0, 20) : []
-      discover(game, characterId, ids)
-      send(res, 200, { game: view(game, hint) })
-      return true
-    }
-
-    if (characterId !== game.scenario.solver_id || !game.met.includes(characterId)) fail(req, 409, 'cannotFinish')
-    if (game.status === 'active') finishGame(db, game)
-    send(res, 200, { game: view(game, hint) })
+    const persona = personaFor(game, session, hint)
+    const cost = noCost()
+    const greeting = await speakLine(persona, session, persona.firstMessage, cost).catch(providerFailure(req))
+    recordTalk(db, game, characterId, 'turns')
+    markMet(db, game, characterId)
+    void deps.scenes?.ensure(game.id, character, game.scenario.time_of_day, game.lang)
+    talks.set(session.id, session)
+    session.lines.push({ role: 'agent', text: greeting.text })
+    addLines(db, game, characterId, [{ role: 'agent', text: greeting.text }])
+    addCost(session.cost, cost)
+    recordCost(db, game, characterId, 'greet', cost)
+    send(res, 200, {
+      character: card(game.scenario, character, hint),
+      talkId: session.id,
+      reply: { ...greeting, cost: usd(cost) },
+      total: usd(session.cost),
+      spent: gameCost(db, game),
+      game: view(game, hint),
+    })
     return true
   }
 }

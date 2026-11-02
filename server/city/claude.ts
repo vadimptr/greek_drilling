@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Translator } from './providers.ts'
+import type { Usage } from './costs.ts'
+import { ProviderError, type FactMatcher, type LevelChecker, type ScenarioGenerator, type Talker, type ToolCall, type Translator } from './providers.ts'
 import { langOf, logicRules, SCENARIO_SCHEMA, scenarioRequest, validateScenario, type Lang, type Level, type Scenario, type TimeOfDay } from './scenario.ts'
 import { LANGUAGE_EN, settingOf } from './settings.ts'
 
@@ -113,7 +114,7 @@ const MATCH_SCHEMA = {
 export function claudeFacts(apiKey: string): FactMatcher {
   const client = new Anthropic({ apiKey, timeout: 60_000 })
   return {
-    async match(speaker, lines, facts, people, lang = 'el') {
+    async match(speaker, lines, facts, people, lang = 'el', meter) {
       const transcript = lines.map((l) => `${l.role === 'agent' ? speaker : 'Tourist'}: ${l.text}`).join('\n')
       const list = facts.length ? facts.map((f) => `- ${f.id}: ${f.text}`).join('\n') : '- none'
       const others = people.length ? people.map((p) => `- ${p.id}: ${p.name}`).join('\n') : '- none'
@@ -139,6 +140,7 @@ Return ids; empty lists if none.`,
           },
         ],
       })
+      meter?.(response.usage)
       if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to match facts')
       const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
       const parsed = JSON.parse(text) as { fact_ids?: unknown; people_ids?: unknown }
@@ -221,7 +223,7 @@ const LEVEL_SCHEMA = {
 export function claudeLevels(apiKey: string): LevelChecker {
   const client = new Anthropic({ apiKey, timeout: 60_000 })
   return {
-    async check(level, lines, lang = 'el', hint = 'ru') {
+    async check(level, lines, lang = 'el', hint = 'ru', meter) {
       const list = lines.map((l, i) => `${i}: ${l}`).join('\n')
       const response = await ask(client, HELPER_MODEL, {
         max_tokens: 6000,
@@ -239,10 +241,93 @@ List only the replies that are clearly too difficult for ${level} or break the r
           },
         ],
       })
+      meter?.(response.usage)
       if (response.stop_reason === 'refusal') throw new ProviderError('Claude refused to check the level')
       const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
       const parsed = JSON.parse(text) as { issues?: { index: number; reason: string; note_en: string }[] }
       return (parsed.issues ?? []).filter((x) => Number.isInteger(x.index) && x.index >= 0 && x.index < lines.length)
+    },
+  }
+}
+
+const TALK_TOOLS = [
+  {
+    name: 'reveal_fact',
+    description: 'Call right after you have told the tourist one of your facts (or confirmed their guess). Silent: it is never spoken.',
+    input_schema: { type: 'object' as const, properties: { fact_id: { type: 'string' } }, required: ['fact_id'] },
+  },
+  {
+    name: 'introduce',
+    description: 'Call every time you tell the tourist who a person from your list is or where to find them. Silent.',
+    input_schema: { type: 'object' as const, properties: { character_id: { type: 'string' } }, required: ['character_id'] },
+  },
+  {
+    name: 'set_mood',
+    description: 'Call whenever your mood towards the tourist changes. Silent.',
+    input_schema: {
+      type: 'object' as const,
+      properties: { mood: { type: 'string', enum: ['friendly', 'annoyed', 'offended', 'angry'] }, reason: { type: 'string' } },
+      required: ['mood', 'reason'],
+    },
+  },
+  {
+    name: 'goal_completed',
+    description: 'Call once when the tourist has obtained or found out everything they needed from you. Silent.',
+    input_schema: { type: 'object' as const, properties: {} },
+  },
+  {
+    name: 'end_call',
+    description: 'Ends the conversation after the line you say in this reply: your single goodbye, or your final line when you are angry and leave.',
+    input_schema: { type: 'object' as const, properties: {} },
+  },
+]
+
+const SPOKEN = `
+
+This is a turn-by-turn voice conversation: the tourist says one phrase, you answer once. Your reply is turned into speech as it is, so write only the words you say out loud: no stage directions, no actions in asterisks or brackets, no emojis, no quotes, no lists. Tools are silent and can be called in the same reply as your words.`
+
+type Message = { role: 'user' | 'assistant'; content: string | unknown[] }
+
+export function talkMessages(lines: { role: 'user' | 'agent'; text: string }[]): Message[] {
+  const messages: { role: 'user' | 'assistant'; content: string }[] = []
+  for (const l of lines) {
+    const role = l.role === 'agent' ? 'assistant' : 'user'
+    const last = messages[messages.length - 1]
+    if (last && last.role === role) last.content += `\n${l.text}`
+    else messages.push({ role, content: l.text })
+  }
+  if (messages[0]?.role !== 'user') messages.unshift({ role: 'user', content: '(The tourist comes up to you.)' })
+  if (messages[messages.length - 1].role !== 'user') messages.push({ role: 'user', content: '(The tourist says nothing.)' })
+  return messages
+}
+
+export function claudeTalker(apiKey: string, model = HELPER_MODEL): Talker {
+  const client = new Anthropic({ apiKey, timeout: 30_000 })
+  return {
+    async reply(system, lines) {
+      const messages = talkMessages(lines)
+      const usage: Usage[] = []
+      const once = async (msgs: Message[], silentTools: boolean) => {
+        const response = await ask(client, model, {
+          max_tokens: 400,
+          system: [{ type: 'text', text: system + SPOKEN, cache_control: { type: 'ephemeral' } }],
+          tools: TALK_TOOLS,
+          tool_choice: silentTools ? { type: 'none' } : { type: 'auto' },
+          messages: msgs as never,
+        })
+        usage.push(response.usage)
+        return response
+      }
+      const first = await once(messages, false)
+      const tools: ToolCall[] = first.content.flatMap((b) => (b.type === 'tool_use' ? [{ name: b.name, input: (b.input ?? {}) as Record<string, unknown> }] : []))
+      let text = first.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(' ').trim()
+      if (!text && first.stop_reason === 'tool_use' && !tools.some((t) => t.name === 'end_call')) {
+        const results = first.content.flatMap((b) => (b.type === 'tool_use' ? [{ type: 'tool_result', tool_use_id: b.id, content: 'ok' }] : []))
+        const second = await once([...messages, { role: 'assistant', content: first.content }, { role: 'user', content: results }], true)
+        text = second.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(' ').trim()
+      }
+      if (first.stop_reason === 'refusal') throw new ProviderError('Claude refused to answer as the resident')
+      return { text, tools, usage }
     },
   }
 }

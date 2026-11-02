@@ -1,3 +1,4 @@
+import type { Meter, Usage } from './costs.ts'
 import type { Lang, Level, Persona, Scenario, TimeOfDay } from './scenario.ts'
 
 export interface ScenarioGenerator {
@@ -11,6 +12,7 @@ export interface FactMatcher {
     facts: { id: string; text: string }[],
     people: { id: string; name: string }[],
     lang?: Lang,
+    meter?: Meter,
   ): Promise<{ facts: string[]; people: string[] }>
 }
 
@@ -21,7 +23,7 @@ export interface LevelIssue {
 }
 
 export interface LevelChecker {
-  check(level: string, lines: string[], lang?: Lang, hint?: Lang): Promise<LevelIssue[]>
+  check(level: string, lines: string[], lang?: Lang, hint?: Lang, meter?: Meter): Promise<LevelIssue[]>
 }
 
 export interface Translator {
@@ -29,14 +31,24 @@ export interface Translator {
   translateMany(texts: string[], to: Lang): Promise<string[]>
 }
 
-export interface VoiceSession {
-  provider: string
-  connection: Record<string, unknown>
+export interface SpeechProvider {
+  transcribe(audio: Buffer, type: string, lang: Lang): Promise<{ text: string; seconds: number }>
+  speak(text: string, voice: Persona['voice'], speed?: number): Promise<{ audio: Buffer; chars: number }>
 }
 
-export interface VoiceProvider {
-  id: string
-  open(persona: Persona): Promise<VoiceSession>
+export interface ToolCall {
+  name: string
+  input: Record<string, unknown>
+}
+
+export interface TalkReply {
+  text: string
+  tools: ToolCall[]
+  usage: Usage[]
+}
+
+export interface Talker {
+  reply(system: string, lines: { role: 'user' | 'agent'; text: string }[]): Promise<TalkReply>
 }
 
 export class ProviderError extends Error {}

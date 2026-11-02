@@ -45,3 +45,14 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new HttpError(400, 'Ожидается объект')
   return parsed as Record<string, unknown>
 }
+
+export async function readBody(req: IncomingMessage, max: number): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let size = 0
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length
+    if (size > max) throw new HttpError(413, 'Слишком большой запрос')
+    chunks.push(chunk as Buffer)
+  }
+  return Buffer.concat(chunks)
+}

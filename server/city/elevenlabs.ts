@@ -1,11 +1,13 @@
-import { ProviderError, type VoiceProvider } from './providers.ts'
+import { ProviderError, type SpeechProvider } from './providers.ts'
 import type { Age, Gender, Lang } from './scenario.ts'
 
 export interface ElevenLabsConfig {
   apiKey: string
-  agentId: string
   voices: Partial<Record<Lang, Voices>>
   speed: number
+  sttModel: string
+  ttsModel: string
+  fallbackVoice: string
 }
 
 type VoiceSlot = `${Gender}-${Age}` | Gender
@@ -29,28 +31,41 @@ export function pickVoice(voices: Voices, gender: Gender, age: Age, index: numbe
   return list?.[index % list.length]
 }
 
-export function elevenLabsVoice(cfg: ElevenLabsConfig, fetchImpl: typeof fetch = fetch): VoiceProvider {
+const STT_LANG: Record<Lang, string> = { el: 'ell', en: 'eng', ru: 'rus' }
+
+async function failure(what: string, res: Response): Promise<ProviderError> {
+  return new ProviderError(`elevenlabs ${what}: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 300)}`)
+}
+
+export function elevenLabsSpeech(cfg: ElevenLabsConfig, fetchImpl: typeof fetch = fetch): SpeechProvider {
   return {
-    id: 'elevenlabs',
-    async open(persona) {
-      const url = `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${encodeURIComponent(cfg.agentId)}`
-      const res = await fetchImpl(url, { headers: { 'xi-api-key': cfg.apiKey }, signal: AbortSignal.timeout(15_000) })
-      if (!res.ok) throw new ProviderError(`elevenlabs token: HTTP ${res.status} ${await res.text().catch(() => '')}`)
-      const { token } = (await res.json()) as { token?: string }
-      if (!token) throw new ProviderError('elevenlabs token: empty response')
-      const { gender, age, index, lang } = persona.voice
-      const voiceId = pickVoice(cfg.voices[lang] ?? {}, gender, age, index)
-      return {
-        provider: 'elevenlabs',
-        connection: {
-          conversationToken: token,
-          overrides: {
-            agent: { prompt: { prompt: persona.systemPrompt }, firstMessage: persona.firstMessage, language: persona.language },
-            tts: { ...(voiceId ? { voiceId } : {}), speed: persona.speed ?? cfg.speed },
-            asr: { keywords: persona.keywords },
-          },
-        },
-      }
+    async transcribe(audio, type, lang) {
+      const form = new FormData()
+      form.append('model_id', cfg.sttModel)
+      form.append('language_code', STT_LANG[lang])
+      form.append('tag_audio_events', 'false')
+      form.append('file', new Blob([new Uint8Array(audio)], { type }), 'speech')
+      const res = await fetchImpl('https://api.elevenlabs.io/v1/speech-to-text', {
+        method: 'POST',
+        headers: { 'xi-api-key': cfg.apiKey },
+        body: form,
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!res.ok) throw await failure('speech-to-text', res)
+      const data = (await res.json()) as { text?: string; words?: { end?: number }[] }
+      const seconds = Math.max(0, ...(data.words ?? []).map((w) => w.end ?? 0))
+      return { text: (data.text ?? '').trim(), seconds }
+    },
+    async speak(text, voice, speed) {
+      const voiceId = pickVoice(cfg.voices[voice.lang] ?? {}, voice.gender, voice.age, voice.index) ?? cfg.fallbackVoice
+      const res = await fetchImpl(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_64`, {
+        method: 'POST',
+        headers: { 'xi-api-key': cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, model_id: cfg.ttsModel, language_code: voice.lang, voice_settings: { speed: speed ?? cfg.speed } }),
+        signal: AbortSignal.timeout(30_000),
+      })
+      if (!res.ok) throw await failure('text-to-speech', res)
+      return { audio: Buffer.from(await res.arrayBuffer()), chars: text.length }
     },
   }
 }

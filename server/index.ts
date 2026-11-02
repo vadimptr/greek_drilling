@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
 import { createApp } from './app.ts'
-import { claudeFacts, claudeLevels, claudeScenarios, claudeTranslator } from './city/claude.ts'
-import { dropModeratedVoices, elevenLabsVoice, parseVoices } from './city/elevenlabs.ts'
+import { claudeFacts, claudeLevels, claudeScenarios, claudeTalker, claudeTranslator } from './city/claude.ts'
+import { dropModeratedVoices, elevenLabsSpeech, parseVoices } from './city/elevenlabs.ts'
+import { parsePrices } from './city/costs.ts'
 import { parseAllowed } from './city/routes.ts'
 import { parsePoolSizes } from './city/pool.ts'
 import { elevenLabsImages, googleImages, openAiImages, SceneStore } from './city/images.ts'
@@ -16,15 +17,16 @@ if (!secret || secret.length < 16) {
 }
 
 const env = process.env
-const voiceConfig =
-  env.ELEVENLABS_API_KEY && env.ELEVENLABS_AGENT_ID
-    ? {
-        apiKey: env.ELEVENLABS_API_KEY,
-        agentId: env.ELEVENLABS_AGENT_ID,
-        voices: { el: parseVoices(env.ELEVENLABS_VOICES), en: parseVoices(env.ELEVENLABS_VOICES_EN), ru: parseVoices(env.ELEVENLABS_VOICES_RU) },
-        speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
-      }
-    : null
+const voiceConfig = env.ELEVENLABS_API_KEY
+  ? {
+      apiKey: env.ELEVENLABS_API_KEY,
+      voices: { el: parseVoices(env.ELEVENLABS_VOICES), en: parseVoices(env.ELEVENLABS_VOICES_EN), ru: parseVoices(env.ELEVENLABS_VOICES_RU) },
+      speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
+      sttModel: env.ELEVENLABS_STT_MODEL || 'scribe_v1',
+      ttsModel: env.ELEVENLABS_TTS_MODEL || 'eleven_flash_v2_5',
+      fallbackVoice: env.ELEVENLABS_FALLBACK_VOICE || 'JBFqnCBsd6RMkjVDRZzb',
+    }
+  : null
 if (voiceConfig) {
   void dropModeratedVoices(voiceConfig).then((ids) => ids.length && console.error(`voices dropped (live moderation or missing): ${ids.join(', ')}`))
 }
@@ -38,7 +40,9 @@ const city = {
   facts: env.ANTHROPIC_API_KEY ? claudeFacts(env.ANTHROPIC_API_KEY) : null,
   translator: env.ANTHROPIC_API_KEY ? claudeTranslator(env.ANTHROPIC_API_KEY) : null,
   levels: env.ANTHROPIC_API_KEY ? claudeLevels(env.ANTHROPIC_API_KEY) : null,
-  voice: voiceConfig ? elevenLabsVoice(voiceConfig) : null,
+  speech: voiceConfig ? elevenLabsSpeech(voiceConfig) : null,
+  talker: env.ANTHROPIC_API_KEY ? claudeTalker(env.ANTHROPIC_API_KEY, env.CITY_TALK_MODEL || undefined) : null,
+  prices: parsePrices(env.CITY_PRICES),
 }
 
 const dataDir = dirname(env.DB_PATH ?? 'data/gd.db')

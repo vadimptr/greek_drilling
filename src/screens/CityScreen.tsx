@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  completeGame, currentGame, introduce, newGame, requestScene, unlockCity, type LevelCheck, revealFacts, saveLines, setMood, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
+  currentGame, leaveTalk, newGame, requestScene, say, unlockCity, type LevelCheck, type Reply, translateCached, talk, CityError, type CharacterCard, type CityGame, type Line,
 } from '../logic/city/api'
 import { Notebook } from '../components/city/Notebook'
 import { Tip } from '../components/city/Tip'
@@ -9,10 +9,11 @@ import { Progress } from '../components/city/Progress'
 import { useAmbience } from '../logic/city/useAmbience'
 import { CITY_NAMES, type Lang } from '../logic/city/name'
 import { translate, useT, useUi } from '../logic/i18n'
-import { startVoice, type VoiceCall, type VoiceHandlers } from '../logic/city/voice'
+import { Player, Recorder } from '../logic/city/recorder'
 import type { Level } from '../types/word'
 
-type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'talking' | 'paused' | 'walking' | 'won'
+type Phase = 'loading' | 'idle' | 'generating' | 'painting' | 'connecting' | 'talking' | 'walking'
+type TurnState = 'ready' | 'arming' | 'recording' | 'thinking' | 'speaking'
 
 interface Props {
   allowed: boolean | null
@@ -29,11 +30,8 @@ interface Props {
 }
 
 const SUBS_KEY = 'greek_drilling.city.subs'
-const LEAVE_AFTER_SPEECH_MS = 900
-const LEAVE_AFTER_GOODBYE_MS = 300
-const FACT_SPEECH_WINDOW_MS = 8000
-const GOODBYE_HANGUP_MS = 10_000
 const WALK_MS = 1200
+const MIN_SPEECH_MS = 400
 const FRESH_MS = 4000
 const SCENE_POLL_MS = 2000
 const SCENE_WAIT_MS = 180_000
@@ -45,6 +43,10 @@ function readSubs(): boolean {
   } catch {
     return false
   }
+}
+
+function money(usd: number): string {
+  return usd < 1 ? `${(usd * 100).toFixed(usd < 0.1 ? 2 : 1)}¢` : `$${usd.toFixed(2)}`
 }
 
 function errorText(e: unknown, ui: Lang): string {
@@ -94,21 +96,24 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
 
   const gameRef = useRef<CityGame | null>(null)
   const currentRef = useRef<string | null>(null)
-  const callRef = useRef<VoiceCall | null>(null)
+  const talkRef = useRef<string | null>(null)
   const linesRef = useRef<Line[]>([])
-  const modeRef = useRef<'speaking' | 'listening'>('listening')
-  const pendingRef = useRef<string | null>(null)
-  const walkAwayRef = useRef(false)
-  const endingRef = useRef(false)
-  const leavingRef = useRef(false)
   const lastSpokeRef = useRef<string | null>(null)
-  const lastAgentLineRef = useRef(0)
-  const pendingFactsRef = useRef<{ id: string; at: number }[]>([])
-  const moodRef = useRef<string | null>(null)
+  const recorder = useRef(new Recorder())
+  const player = useRef(new Player())
+  const pressedRef = useRef(false)
+  const turnRef = useRef<TurnState>('ready')
+  const [turn, setTurnState] = useState<TurnState>('ready')
+  const [cost, setCost] = useState<{ turn: number | null; talk: number; game: number } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const wonRef = useRef(false)
-  const timerRef = useRef<number | undefined>(undefined)
+  const [walkingId, setWalkingId] = useState<string | null>(null)
   const callSeq = useRef(0)
+
+  const setTurn = (next: TurnState) => {
+    turnRef.current = next
+    setTurnState(next)
+    setSpeaking(next === 'speaking')
+  }
 
   const applyGame = (g: CityGame | null) => {
     const prev = gameRef.current
@@ -121,7 +126,6 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
         freshTimer.current = window.setTimeout(() => setFresh(new Set()), FRESH_MS)
       }
     }
-    if (g?.status === 'won' && callRef.current) wonRef.current = true
     gameRef.current = g
     setGame(g)
     setGameAt(Date.now())
@@ -130,6 +134,21 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
 
   const applyIfCurrent = (g: CityGame) => {
     if (gameRef.current?.id === g.id) applyGame(g)
+  }
+
+  const addLine = (line: Line) => {
+    linesRef.current = [...linesRef.current, line]
+    setLines(linesRef.current)
+    if (subsRef.current) void translateCached(line.text).catch(() => undefined)
+  }
+
+  const closeTalk = () => {
+    const id = talkRef.current
+    talkRef.current = null
+    pressedRef.current = false
+    player.current.stop()
+    recorder.current.close()
+    return id
   }
 
   useEffect(() => {
@@ -151,10 +170,10 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
       })
     return () => {
       alive = false
-      window.clearTimeout(timerRef.current)
       window.clearTimeout(freshTimer.current)
       callSeq.current++
-      void callRef.current?.end()
+      const id = closeTalk()
+      if (id) void leaveTalk(id).catch(() => undefined)
     }
   }, [allowed])
 
@@ -168,152 +187,52 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
     }
   }
 
-  const leave = () => {
-    window.clearTimeout(timerRef.current)
-    leavingRef.current = true
-    void callRef.current?.end()
-  }
-
-  const scheduleLeave = (ms: number) => {
-    window.clearTimeout(timerRef.current)
-    timerRef.current = window.setTimeout(leave, ms)
-  }
-
-  const finishCall = (seq: number) => {
-    if (seq !== callSeq.current || callRef.current === null) return
-    callRef.current = null
-    window.clearTimeout(timerRef.current)
-    setSpeaking(false)
+  const finishTalk = (opts: { next?: string; walkedAway?: boolean } = {}) => {
     const g = gameRef.current
     const from = currentRef.current
-    if (g && from && linesRef.current.length) {
-      const who = g.notebook.find((p) => p.id === from)?.name ?? ''
-      void saveLines(g.id, from, linesRef.current)
+    const who = g?.notebook.find((p) => p.id === from)?.name ?? ''
+    callSeq.current++
+    const id = closeTalk()
+    setTurn('ready')
+    if (id && g) {
+      void leaveTalk(id)
         .then((r) => {
           applyIfCurrent(r.game)
-          if (r.check && gameRef.current?.id === g.id) setLevelCheck({ who, check: r.check })
+          if (gameRef.current?.id !== g.id) return
+          setCost((c) => (c ? { ...c, talk: r.total, game: r.spent } : c))
+          if (r.check) setLevelCheck({ who, check: r.check })
         })
         .catch(() => undefined)
     }
-    const target = pendingRef.current
-    pendingRef.current = null
-    if (walkAwayRef.current) {
-      walkAwayRef.current = false
-      const who = g?.notebook.find((p) => p.id === from)
-      setNotice(t('city.walkedAway', { name: who?.name ?? t('city.someone') }))
-    }
-    endingRef.current = false
-    const dropped = !leavingRef.current && !walkAwayRef.current && !target && !wonRef.current
-    leavingRef.current = false
-    if (dropped) {
-      setPhase('paused')
-      return
-    }
+    if (opts.walkedAway) setNotice(t('city.walkedAway', { name: who || t('city.someone') }))
     lastSpokeRef.current = from
     currentRef.current = null
     setCharacter(null)
-    if (wonRef.current) {
-      setPhase('won')
-    } else if (target && g) {
+    if (opts.next && g && g.status === 'active') {
       setPhase('walking')
-      window.setTimeout(() => void connectTo(g, target, from), WALK_MS)
+      setWalkingId(opts.next)
+      const next = opts.next
+      window.setTimeout(() => void connectTo(g, next, from), WALK_MS)
     } else {
       setPhase('idle')
     }
   }
 
-  const handlers = (seq: number): VoiceHandlers => ({
-    onLine: (role, text) => {
-      if (seq !== callSeq.current || !text.trim()) return
-      linesRef.current = [...linesRef.current, { role, text }]
-      if (role === 'agent') {
-        lastAgentLineRef.current = Date.now()
-        const g = gameRef.current
-        const current = currentRef.current
-        const fresh = pendingFactsRef.current.filter((f) => Date.now() - f.at < FACT_SPEECH_WINDOW_MS).map((f) => f.id)
-        pendingFactsRef.current = []
-        if (g && current && fresh.length) void revealFacts(g.id, current, fresh).then(applyIfCurrent).catch(() => undefined)
-      }
-      if (subsRef.current) void translateCached(text).catch(() => undefined)
-      setLines(linesRef.current)
-    },
-    onMode: (mode) => {
-      if (seq !== callSeq.current) return
-      modeRef.current = mode
-      setSpeaking(mode === 'speaking')
-      if (!pendingRef.current && !walkAwayRef.current && !endingRef.current) return
-      if (mode === 'speaking') window.clearTimeout(timerRef.current)
-      else scheduleLeave(pendingRef.current ? LEAVE_AFTER_SPEECH_MS : LEAVE_AFTER_GOODBYE_MS)
-    },
-    onTool: (name, params) => {
-      const g = gameRef.current
-      const current = currentRef.current
-      if (seq !== callSeq.current || !g || !current) return 'not available'
-      if (name === 'introduce' || name === 'go_to') {
-        const target = String(params.character_id ?? '')
-        if (target && target !== current) void introduce(g.id, current, target).then(applyIfCurrent).catch(() => undefined)
-        if (name === 'introduce') return 'ok'
-      }
-      if (name === 'end_talk' || name === 'go_to') {
-        endingRef.current = true
-        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_GOODBYE_MS : 15_000)
-        return 'ok'
-      }
-      if (name === 'set_mood') {
-        const mood = String(params.mood ?? '')
-        const reason = String(params.reason ?? '')
-        moodRef.current = mood || moodRef.current
-        if (mood) void setMood(g.id, current, mood, reason).then(applyIfCurrent).catch(() => undefined)
-        return 'ok'
-      }
-      if (name === 'walk_away') {
-        walkAwayRef.current = true
-        pendingRef.current = null
-        scheduleLeave(modeRef.current === 'listening' ? LEAVE_AFTER_GOODBYE_MS : 15_000)
-        return 'ok'
-      }
-      if (name === 'reveal_fact') {
-        const factId = String(params.fact_id ?? '')
-        if (!factId) return 'ok'
-        if (Date.now() - lastAgentLineRef.current < FACT_SPEECH_WINDOW_MS) {
-          void revealFacts(g.id, current, [factId]).then(applyIfCurrent).catch(() => undefined)
-        } else {
-          pendingFactsRef.current.push({ id: factId, at: Date.now() })
-        }
-        return 'ok'
-      }
-      completeGame(g.id, current)
-        .then((done) => {
-          applyIfCurrent(done)
-          wonRef.current = true
-        })
-        .catch(() => undefined)
-      return 'ok'
-    },
-    onSystemTool: (name) => {
-      if (seq !== callSeq.current || name !== 'end_call') return
-      const current = gameRef.current?.notebook.find((p) => p.id === currentRef.current)
-      if (moodRef.current === 'angry' || (moodRef.current === null && current?.mood === 'angry')) walkAwayRef.current = true
-      endingRef.current = true
-      leavingRef.current = true
-    },
-    onEnd: (byAgent) => {
-      if (byAgent && seq === callSeq.current && Date.now() - lastAgentLineRef.current < GOODBYE_HANGUP_MS) leavingRef.current = true
-      finishCall(seq)
-    },
-    onError: (message) => {
-      if (seq !== callSeq.current) return
-      setError(message || t('city.dropped'))
-    },
-  })
+  const playReply = async (reply: Reply | null, seq: number) => {
+    if (reply?.audio && seq === callSeq.current) {
+      setTurn('speaking')
+      await player.current.play(reply.audio)
+    }
+    if (seq === callSeq.current) setTurn('ready')
+  }
 
-  const connectTo = async (g: CityGame, characterId: string, from: string | null, resume?: 'voice' | 'tap') => {
+  const connectTo = async (g: CityGame, characterId: string, from: string | null) => {
     setError(null)
     setNotice(null)
     setLevelCheck(null)
     const seq = ++callSeq.current
     try {
-      if (!resume && g.scenesEnabled && !g.characters.find((c) => c.id === characterId)?.scene) {
+      if (g.scenesEnabled && !g.characters.find((c) => c.id === characterId)?.scene) {
         setPhase('painting')
         setPaintingId(characterId)
         const drawn = await waitScene(g, characterId, seq)
@@ -322,24 +241,21 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
         if (!drawn) setNotice(t('city.noScene'))
       }
       setPhase('connecting')
-      const opened = await talk(g.id, characterId, from, speedRef.current, resume)
-      if (seq !== callSeq.current) return
+      const opened = await talk(g.id, characterId, from, speedRef.current)
+      if (seq !== callSeq.current) {
+        void leaveTalk(opened.talkId).catch(() => undefined)
+        return
+      }
       applyGame(opened.game)
       currentRef.current = characterId
+      talkRef.current = opened.talkId
       setCharacter(opened.character)
       linesRef.current = []
       setLines([])
-      lastAgentLineRef.current = 0
-      pendingFactsRef.current = []
-      moodRef.current = null
-      modeRef.current = 'listening'
-      const call = await startVoice(opened.session, handlers(seq))
-      if (seq !== callSeq.current) {
-        void call.end()
-        return
-      }
-      callRef.current = call
+      setCost({ turn: opened.reply.cost, talk: opened.total, game: opened.spent })
       setPhase('talking')
+      if (opened.reply.text) addLine({ role: 'agent', text: opened.reply.text, cost: opened.reply.cost })
+      await playReply(opened.reply, seq)
     } catch (e) {
       if (seq !== callSeq.current) return
       setError(errorText(e, ui))
@@ -369,18 +285,105 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
     return false
   }
 
+  const press = async () => {
+    if (phase !== 'talking' || !talkRef.current || pressedRef.current) return
+    if (turnRef.current === 'speaking') player.current.stop()
+    else if (turnRef.current !== 'ready') return
+    pressedRef.current = true
+    setError(null)
+    setNotice(null)
+    setTurn('arming')
+    const seq = callSeq.current
+    try {
+      await recorder.current.start()
+    } catch (e) {
+      pressedRef.current = false
+      if (seq !== callSeq.current) return
+      setError(errorText(e, ui))
+      setTurn('ready')
+      return
+    }
+    if (seq !== callSeq.current) return
+    if (!pressedRef.current) {
+      await recorder.current.stop()
+      setNotice(t('city.tooShort'))
+      setTurn('ready')
+      return
+    }
+    setTurn('recording')
+  }
+
+  const release = async () => {
+    if (!pressedRef.current) return
+    pressedRef.current = false
+    if (turnRef.current !== 'recording') return
+    const seq = callSeq.current
+    const talkId = talkRef.current
+    const { blob, ms } = await recorder.current.stop()
+    if (seq !== callSeq.current || !talkId) return
+    if (ms < MIN_SPEECH_MS || blob.size < 500) {
+      setNotice(t('city.tooShort'))
+      setTurn('ready')
+      return
+    }
+    setTurn('thinking')
+    try {
+      const r = await say(talkId, blob, ms)
+      if (seq !== callSeq.current) return
+      applyGame(r.game)
+      setCost({ turn: r.cost, talk: r.total, game: r.spent })
+      if (!r.heard) {
+        setNotice(t('city.notHeard'))
+        setTurn('ready')
+        return
+      }
+      addLine({ role: 'user', text: r.heard })
+      if (r.reply?.text) addLine({ role: 'agent', text: r.reply.text, cost: r.cost })
+      await playReply(r.reply, seq)
+      if (seq !== callSeq.current) return
+      if (r.ended || r.game.status === 'won') finishTalk({ walkedAway: r.walkedAway })
+    } catch (e) {
+      if (seq !== callSeq.current) return
+      setError(errorText(e, ui))
+      if (e instanceof CityError && e.status === 410) finishTalk()
+      else setTurn('ready')
+    }
+  }
+
+  useEffect(() => {
+    if (phase !== 'talking') return
+    const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || typing(e)) return
+      e.preventDefault()
+      void press()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || typing(e)) return
+      e.preventDefault()
+      void release()
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  })
+
   const startNew = async () => {
     const previous = gameRef.current
     const previousCharacter = character
+    if (talkRef.current) finishTalk()
     setError(null)
     setNotice(null)
     setPhase('generating')
     setStoryStartedAt(Date.now())
     setCharacter(null)
     setLines([])
+    setCost(null)
     currentRef.current = null
     lastSpokeRef.current = null
-    wonRef.current = false
     gameRef.current = null
     setGame(null)
     try {
@@ -398,29 +401,8 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
     }
   }
 
-  const resumeTalk = (kind: 'tap') => {
-    const g = gameRef.current
-    const id = currentRef.current
-    if (g && id) void connectTo(g, id, null, kind)
-  }
-
-  const stepAway = () => {
-    lastSpokeRef.current = currentRef.current
-    currentRef.current = null
-    setCharacter(null)
-    setPhase('idle')
-  }
-
   const onMic = () => {
-    if (phase === 'talking') {
-      leave()
-      return
-    }
-    if (phase === 'paused') {
-      resumeTalk('tap')
-      return
-    }
-    if (phase !== 'idle' && phase !== 'won') return
+    if (phase !== 'idle') return
     const g = gameRef.current
     if (!g || g.status === 'won') {
       void startNew()
@@ -432,14 +414,8 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
   const approach = (id: string) => {
     const g = gameRef.current
     if (!g || g.status !== 'active' || id === currentRef.current) return
-    if (phase === 'talking') {
-      pendingRef.current = id
-      leave()
-    } else if (phase === 'paused') {
-      void connectTo(g, id, currentRef.current)
-    } else if (phase === 'idle') {
-      void connectTo(g, id, lastSpokeRef.current)
-    }
+    if (phase === 'talking') finishTalk({ next: id })
+    else if (phase === 'idle') void connectTo(g, id, lastSpokeRef.current)
   }
 
 
@@ -455,20 +431,28 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
     return () => window.clearInterval(timer)
   }, [waitingScene, game?.id])
 
-  const done = allowed === true && game?.status === 'won' && (phase === 'won' || phase === 'idle')
+  const done = allowed === true && game?.status === 'won' && phase === 'idle'
   const busy = phase === 'loading' || phase === 'generating' || phase === 'painting' || phase === 'connecting' || phase === 'walking'
   const active = game && game.status === 'active'
-  const walkingTo = pendingRef.current && game?.characters.find((c) => c.id === pendingRef.current)
+  const walkingTo = phase === 'walking' && walkingId ? game?.characters.find((c) => c.id === walkingId) : undefined
 
   const sceneOf = (id: string | null | undefined) => (id ? (game?.characters.find((c) => c.id === id)?.scene ?? null) : null)
   const shownId = phase === 'painting' ? paintingId : (character?.id ?? (active && game?.met.length === 0 ? game.startId : null))
   const choosing = !!active && phase === 'idle' && !character && (game?.met.length ?? 0) > 0
   const scene = phase === 'generating' || phase === 'walking' ? null : sceneOf(shownId)
   const sceneState = phase === 'generating' || phase === 'walking' || scene ? null : game?.characters.find((c) => c.id === shownId)?.sceneState
-  const soundOn = phase === 'painting' || phase === 'connecting' || phase === 'talking' || phase === 'paused' || (phase === 'idle' && !!character) || phase === 'won'
+  const soundOn = phase === 'painting' || phase === 'connecting' || phase === 'talking' || (phase === 'idle' && !!character)
   const ambienceUrl = allowed && soundOn ? (game?.characters.find((c) => c.id === shownId)?.ambience ?? null) : null
   useAmbience(ambienceUrl, ambienceVolume, speaking)
-  const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'paused' || phase === 'idle')
+  const showSpeaker = !!character && (phase === 'connecting' || phase === 'talking' || phase === 'idle')
+  const talking = phase === 'talking'
+  const micClass = !talking
+    ? 'mic-btn'
+    : turn === 'recording'
+      ? 'mic-btn mic-listening'
+      : turn === 'arming' || turn === 'thinking'
+        ? 'mic-btn mic-waiting'
+        : 'mic-btn mic-hold'
 
   return (
     <div className="city-layout">
@@ -531,6 +515,11 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
                 <Tip text={`${character.nameHint !== character.name ? `${character.nameHint} · ` : ''}${character.roleHint} · ${character.placeHint}`}>
                   <span className="city-role">{character.role} · {character.place}</span>
                 </Tip>
+                {cost && (
+                  <div className="city-cost">
+                    💰 {t('city.cost', { turn: cost.turn === null ? '—' : money(cost.turn), talk: money(cost.talk), game: money(cost.game) })}
+                  </div>
+                )}
               </div>
             )}
             {subs && lines.length > 0 && (
@@ -542,6 +531,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
                     className={l.role === 'user' ? 'city-line city-line-me' : 'city-line'}
                   >
                     {l.text}
+                    {l.cost !== undefined && <span className="city-line-cost"> · {money(l.cost)}</span>}
                   </Translated>
                 ))}
               </div>
@@ -554,8 +544,11 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
           <div className="speak-status" aria-live="polite">
             {error && <span className="speak-bad">{error}</span>}
             {!error && phase === 'connecting' && t('city.approaching')}
-            {!error && phase === 'talking' && (speaking ? t('city.speaking') : t('city.listening'))}
-            {!error && phase === 'paused' && t('city.paused')}
+            {!error && talking && turn === 'ready' && t('city.holdToTalk')}
+            {!error && talking && turn === 'arming' && t('city.micStarting')}
+            {!error && talking && turn === 'recording' && t('city.recording')}
+            {!error && talking && turn === 'thinking' && t('city.thinking', { name: character?.name ?? '' })}
+            {!error && talking && turn === 'speaking' && t('city.speaking')}
             {!error && done && t('city.doneStatus')}
             {allowed === false && !signedIn && (
               <>
@@ -618,16 +611,26 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
               )}
             </div>
             <button
-              className={phase === 'talking' ? 'mic-btn mic-listening' : 'mic-btn'}
+              className={micClass}
               onClick={onMic}
-              disabled={busy || !allowed || choosing}
-              aria-label={phase === 'talking' ? t('city.endTalk') : t('city.startTalk')}
+              onPointerDown={(e) => {
+                if (!talking) return
+                e.preventDefault()
+                e.currentTarget.setPointerCapture(e.pointerId)
+                player.current.unlock()
+                void press()
+              }}
+              onPointerUp={() => void release()}
+              onPointerCancel={() => void release()}
+              onContextMenu={(e) => e.preventDefault()}
+              disabled={busy || !allowed || choosing || (talking && turn === 'thinking')}
+              aria-label={talking ? t('city.holdAria') : t('city.startTalk')}
             >
-              {busy ? '…' : phase === 'talking' ? '■' : phase === 'paused' ? '▶' : '🎤'}
+              {busy || (talking && (turn === 'arming' || turn === 'thinking')) ? '…' : '🎤'}
             </button>
             <div className="city-dock-side">
-              {phase === 'paused' && (
-                <button className="secondary-btn" onClick={stepAway}>
+              {talking && (
+                <button className="secondary-btn" onClick={() => finishTalk()}>
                   {t('city.stepAway')}
                 </button>
               )}
@@ -651,8 +654,8 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
           people={game.notebook}
           score={game.score}
           fresh={fresh}
-          current={phase === 'talking' || phase === 'connecting' || phase === 'paused' ? currentRef.current : null}
-          canPick={active === true && (phase === 'idle' || phase === 'talking' || phase === 'paused')}
+          current={phase === 'talking' || phase === 'connecting' ? currentRef.current : null}
+          canPick={active === true && (phase === 'idle' || phase === 'talking')}
           onPick={approach}
         />
       )}

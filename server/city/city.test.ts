@@ -4,7 +4,8 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createApp } from '../app.ts'
 import { openDb } from '../db.ts'
-import { dropModeratedVoices, elevenLabsVoice, parseVoices, pickVoice } from './elevenlabs.ts'
+import { dropModeratedVoices, elevenLabsSpeech, parseVoices, pickVoice } from './elevenlabs.ts'
+import type { SpeechProvider, Talker, ToolCall } from './providers.ts'
 import type { CityDeps } from './routes.ts'
 import { buildPersona, validateScenario, type Fact, type Scenario } from './scenario.ts'
 import { leaderboard, stripTags } from './routes.ts'
@@ -44,9 +45,44 @@ function fact(id: string, about: string, text_ru: string, points: number, extra:
   return { id, about, text_ru, text_en: text_ru, points, initial: false, goal: false, known_by: [], ...extra }
 }
 
+function fakeTalker(prompts: string[]): Talker {
+  return {
+    async reply(system, lines) {
+      prompts.push(system)
+      const words = lines[lines.length - 1].text.split(/\s+/)
+      const tools: ToolCall[] = []
+      let text = 'Εντάξει.'
+      for (const w of words.filter((x) => x.startsWith('!'))) {
+        const [cmd, arg = '', ...rest] = w.slice(1).split(':')
+        if (cmd === 'fact') tools.push({ name: 'reveal_fact', input: { fact_id: arg } })
+        if (cmd === 'intro') tools.push({ name: 'introduce', input: { character_id: arg } })
+        if (cmd === 'mood') tools.push({ name: 'set_mood', input: { mood: arg, reason: rest.join(':').replace(/_/g, ' ') } })
+        if (cmd === 'goal') tools.push({ name: 'goal_completed', input: {} })
+        if (cmd === 'end') tools.push({ name: 'end_call', input: {} })
+        if (cmd === 'say') text = [arg, ...rest].join(':').replace(/_/g, ' ')
+        if (cmd === 'quiet') text = ''
+        if (cmd === 'tagged') text = '[happy] Γεια σου!'
+        if (cmd === 'hard') text = 'Έχεις κάψει πολύ! [concerned]'
+      }
+      return { text, tools, usage: [{ input_tokens: 1000, output_tokens: 100 }] }
+    },
+  }
+}
+
+function fakeSpeech(spoken: { text: string; speed?: number }[]): SpeechProvider {
+  return {
+    transcribe: async (audio) => ({ text: audio.toString('utf8').trim(), seconds: 0 }),
+    speak: async (text, _voice, speed) => {
+      spoken.push({ text, speed })
+      return { audio: Buffer.from('mp3'), chars: text.length }
+    },
+  }
+}
+
 async function start(overrides: Partial<CityDeps> = {}) {
   const db = openDb(':memory:')
-  const opened: string[] = []
+  const prompts: string[] = []
+  const spoken: { text: string; speed?: number }[] = []
   const translated: string[] = []
   const deps: CityDeps = {
     allowedUsers: ['Vadim'],
@@ -58,7 +94,8 @@ async function start(overrides: Partial<CityDeps> = {}) {
       translate: async (text, to) => { translated.push(text); return `${to}:${text}` },
       translateMany: async (texts, to) => texts.map((t) => `${to}:${t}`),
     },
-    voice: { id: 'fake', open: async (p) => { opened.push(p.systemPrompt); return { provider: 'fake', connection: { token: 't' } } } },
+    speech: fakeSpeech(spoken),
+    talker: fakeTalker(prompts),
     ...overrides,
   }
   const server = createServer(createApp(db, SECRET, deps))
@@ -74,7 +111,19 @@ async function start(overrides: Partial<CityDeps> = {}) {
     return { status: res.status, body: text ? JSON.parse(text) : null, cookie: (res.headers.get('set-cookie') ?? '').split(';')[0] }
   }
   const login = async (name: string) => (await call('POST', '/api/enter', { name, create: true })).cookie
-  return { call, login, opened, translated, close: () => new Promise((r) => server.close(r)) }
+  const talkTo = (gameId: string, characterId: string, cookie: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) =>
+    call('POST', `/api/city/games/${gameId}/talk`, { characterId, ...extra }, cookie, headers)
+  const say = async (talkId: string, text: string, cookie: string, headers: Record<string, string> = {}, type = 'audio/webm') => {
+    const res = await fetch(`${base}/api/city/talks/${talkId}/say`, {
+      method: 'POST',
+      headers: { 'Content-Type': type, 'X-Audio-Ms': '3000', Cookie: cookie, ...headers },
+      body: text === '' ? 'x' : text.padEnd(200, ' '),
+    })
+    const body = await res.text()
+    return { status: res.status, body: body ? JSON.parse(body) : null }
+  }
+  const leave = (talkId: string, cookie: string, headers: Record<string, string> = {}) => call('POST', `/api/city/talks/${talkId}/leave`, {}, cookie, headers)
+  return { call, login, talkTo, say, leave, prompts, spoken, translated, close: () => new Promise((r) => server.close(r)) }
 }
 
 test('city is visible only to allowed users', async () => {
@@ -89,7 +138,7 @@ test('city is visible only to allowed users', async () => {
 })
 
 test('game flow: start character, referral chain, completion only by the solver', async () => {
-  const { call, login, opened, close } = await start()
+  const { call, login, talkTo, say, prompts, close } = await start()
   const me = await login('Vadim')
   const created = await call('POST', '/api/city/games', { level: 'A1' }, me)
   assert.equal(created.status, 201)
@@ -98,25 +147,29 @@ test('game flow: start character, referral chain, completion only by the solver'
   assert.equal(game.goalHint, 'Узнай у рыбака, что он поймал')
   assert.equal(game.startId, 'eleni')
 
-  const talk = (characterId: string, from?: string) => call('POST', `/api/city/games/${game.id}/talk`, { characterId, from }, me)
+  const talk = (characterId: string, from?: string) => talkTo(game.id, characterId, me, { from })
   assert.equal((await talk('yiannis')).status, 409)
   const first = await talk('eleni')
   assert.equal(first.status, 200)
   assert.deepEqual(first.body.character, { id: 'eleni', name: 'Ελένη', nameHint: 'Элени', role: 'el:племянница рыбака', roleHint: 'племянница рыбака', place: 'πλατεία', placeHint: 'площадь' })
-  assert.deepEqual(first.body.session, { provider: 'fake', connection: { token: 't' } })
+  assert.equal(first.body.reply.text, 'Γεια!')
+  assert.equal(first.body.reply.audio, Buffer.from('mp3').toString('base64'))
   assert.deepEqual(first.body.game.known, ['eleni'])
   assert.equal((await talk('kostas', 'eleni')).status, 409)
-  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)
-  assert.equal((await talk('kostas', 'eleni')).status, 200)
-  assert.match(opened[1], /just come to you after talking to Ελένη/)
+  await say(first.body.talkId, 'Πού; !intro:kostas', me)
+  const second = await talk('kostas', 'eleni')
+  assert.equal(second.status, 200)
+  assert.equal((await say(first.body.talkId, 'Γεια', me)).status, 410)
+  await say(second.body.talkId, 'Γεια', me)
+  assert.match(prompts.at(-1)!, /just come to you after talking to Ελένη/)
+  assert.equal((await say(second.body.talkId, '!goal', me)).body.game.status, 'active')
 
-  assert.equal((await call('POST', `/api/city/games/${game.id}/complete`, { characterId: 'kostas' }, me)).status, 409)
   assert.equal((await talk('yiannis', 'kostas')).status, 409)
-  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'kostas', target: 'yiannis' }, me)
-  assert.equal((await talk('yiannis', 'kostas')).status, 200)
-  assert.match(opened[2], /call the tool goal_completed/)
-  assert.equal((await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'user', text: 'Γεια' }] }, me)).status, 200)
-  const done = await call('POST', `/api/city/games/${game.id}/complete`, { characterId: 'yiannis' }, me)
+  await say(second.body.talkId, '!intro:yiannis', me)
+  const third = await talk('yiannis', 'kostas')
+  assert.equal(third.status, 200)
+  const done = await say(third.body.talkId, 'Ευχαριστώ !goal', me)
+  assert.match(prompts.at(-1)!, /call the tool goal_completed/)
   assert.equal(done.body.game.status, 'won')
   assert.equal((await talk('yiannis')).status, 409)
   assert.equal((await call('GET', '/api/city/games/current', undefined, me)).body.game, null)
@@ -168,23 +221,30 @@ test('persona speaks only Greek at the chosen level and lists contacts', () => {
   assert.ok(p.keywords.includes('Μυθόπολη'))
 })
 
-test('elevenlabs session carries token, persona overrides and the matching voice', async () => {
+test('elevenlabs speech: text-to-speech with the matching voice and speed, scribe transcription', async () => {
   const voices = parseVoices('male-old=v1, female=v2, junk, robot=v3')
   assert.deepEqual(voices, { 'male-old': ['v1'], female: ['v2'] })
-  let url = ''
-  const fakeFetch = (async (u: string) => {
-    url = u
-    return new Response(JSON.stringify({ token: 'tok' }))
+  const asked: { url: string; body: unknown }[] = []
+  const fakeFetch = (async (u: string, init: RequestInit) => {
+    asked.push({ url: u, body: init.body })
+    if (u.includes('speech-to-text')) return new Response(JSON.stringify({ text: ' Γεια σου ', words: [{ end: 0.4 }, { end: 1.25 }] }))
+    return new Response(Buffer.from('mp3'))
   }) as typeof fetch
-  const provider = elevenLabsVoice({ apiKey: 'k', agentId: 'agent_1', voices: { el: voices }, speed: 0.9 }, fakeFetch)
+  const speech = elevenLabsSpeech({ apiKey: 'k', voices: { el: voices }, speed: 0.9, sttModel: 'scribe_v1', ttsModel: 'tts_x', fallbackVoice: 'fb' }, fakeFetch)
   const persona = buildPersona(validateScenario(scenario()), 'eleni', 'A2', { met: [], cameFrom: null, mood: 'friendly', previous: [] })
-  const s = await provider.open(persona)
-  assert.match(url, /conversation\/token\?agent_id=agent_1$/)
-  const conn = s.connection as { conversationToken: string; overrides: { tts: { voiceId?: string; speed: number } } }
-  assert.equal(conn.conversationToken, 'tok')
-  assert.deepEqual(conn.overrides.tts, { voiceId: 'v2', speed: 0.9 })
-  const slow = await provider.open({ ...persona, speed: 0.75 })
-  assert.equal((slow.connection as typeof conn).overrides.tts.speed, 0.75)
+  const out = await speech.speak('Γεια!', persona.voice)
+  assert.equal(out.chars, 5)
+  assert.equal(out.audio.toString(), 'mp3')
+  assert.match(asked[0].url, /text-to-speech\/v2\?output_format=mp3/)
+  assert.deepEqual(JSON.parse(String(asked[0].body)), { text: 'Γεια!', model_id: 'tts_x', language_code: 'el', voice_settings: { speed: 0.9 } })
+  await speech.speak('Γεια!', { ...persona.voice, lang: 'en' }, 0.75)
+  assert.match(asked[1].url, /text-to-speech\/fb\?/)
+  assert.equal(JSON.parse(String(asked[1].body)).voice_settings.speed, 0.75)
+  const heard = await speech.transcribe(Buffer.from('audio'), 'audio/webm', 'el')
+  assert.deepEqual(heard, { text: 'Γεια σου', seconds: 1.25 })
+  const form = asked[2].body as FormData
+  assert.equal(form.get('model_id'), 'scribe_v1')
+  assert.equal(form.get('language_code'), 'ell')
 })
 
 test('voices rotate within a slot and fall back to the nearest age', () => {
@@ -198,29 +258,28 @@ test('voices rotate within a slot and fall back to the nearest age', () => {
 })
 
 test('notebook: initial facts of the met, points for told facts, goal facts complete the quest', async () => {
-  const { call, login, opened, close } = await start()
+  const { call, login, talkTo, say, leave, prompts, close } = await start()
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
   assert.deepEqual(game.notebook, [{ id: 'eleni', name: 'Ελένη', nameHint: 'Элени', gender: 'female', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f1', text: 'на вид лет двадцать', points: 0, goal: false }], hidden: 1 }])
   assert.equal(game.score, 0)
 
-  const facts = (speaker: string, factIds: string[]) => call('POST', `/api/city/games/${game.id}/facts`, { characterId: speaker, factIds }, me)
-  assert.equal((await facts('eleni', ['f2'])).status, 409)
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  assert.match(opened[0], /f4 \(about Γιάννης\): учился в Афинах/)
-  assert.match(opened[0], /call the tool reveal_fact/)
-  const told = (await facts('eleni', ['f2', 'f4', 'f5', 'f1', 'nope'])).body.game
+  const t1 = (await talkTo(game.id, 'eleni', me)).body.talkId
+  const told = (await say(t1, 'x !fact:f2 !fact:f4 !fact:f5 !fact:f1 !fact:nope', me)).body.game
+  assert.match(prompts[0], /f4 \(about Γιάννης\): учился в Афинах/)
+  assert.match(prompts[0], /call the tool reveal_fact/)
   assert.equal(told.score, 22)
   assert.equal(told.total, 22)
   assert.deepEqual(told.notebook.map((p: { id: string }) => p.id), ['eleni', 'yiannis'])
   assert.deepEqual(told.notebook[1], { id: 'yiannis', name: 'Γιάννης', nameHint: 'Яннис', gender: 'male', met: false, mood: 'friendly', moodReason: '', facts: [{ id: 'f4', text: 'учился в Афинах', points: 12, goal: false }], hidden: 2 })
 
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'yiannis', from: 'kostas' }, me)
-  const afterLines = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'yiannis', lines: [{ role: 'agent', text: 'Πέντε κιλά σαρδέλες.' }] }, me)).body.game
-  assert.equal(afterLines.score, 47)
-  assert.equal(afterLines.status, 'active')
-  const won = (await facts('yiannis', ['f6'])).body.game
+  const t2 = (await talkTo(game.id, 'yiannis', me, { from: 'eleni' })).body.talkId
+  await say(t2, 'Γεια', me)
+  const afterLeave = (await leave(t2, me)).body.game
+  assert.equal(afterLeave.score, 47)
+  assert.equal(afterLeave.status, 'active')
+  const t3 = (await talkTo(game.id, 'yiannis', me)).body.talkId
+  const won = (await say(t3, '!fact:f6', me)).body.game
   assert.equal(won.status, 'won')
   assert.equal(won.score, 72)
   assert.deepEqual((await call('GET', '/api/city', undefined, me)).body.total, 72)
@@ -234,30 +293,31 @@ test('scenario validation cleans facts', () => {
 })
 
 test('people appear in the notebook only when introduced; moods persist and shape the next meeting', async () => {
-  const { call, login, opened, close } = await start({ facts: null })
+  const { call, login, talkTo, say, leave, prompts, close } = await start({ facts: null })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  const said = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
-    { role: 'user', text: 'Πού είναι ο Γιάννης;' },
-    { role: 'agent', text: 'Ρώτα τον κύριο Κώστα στο καφενείο.' },
-  ] }, me)).body.game
+  const t = (await talkTo(game.id, 'eleni', me)).body.talkId
+  const said = (await say(t, 'Πού είναι ο Γιάννης;', me)).body.game
   assert.deepEqual(said.notebook.map((p: { id: string }) => p.id), ['eleni'])
-  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas' }, me)).status, 409)
-  const self = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'eleni' }, me)).body.game
+  assert.doesNotMatch(prompts[0], /already talked to this tourist/)
+  assert.equal((await talkTo(game.id, 'kostas', me)).status, 409)
+  const self = (await say(t, '!intro:eleni', me)).body.game
   assert.deepEqual(self.notebook.map((p: { id: string }) => p.id), ['eleni'])
-  const heard = (await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)).body.game
+  const heard = (await say(t, '!intro:kostas', me)).body.game
   assert.deepEqual(heard.notebook.map((p: { id: string }) => p.id), ['eleni', 'kostas'])
 
-  assert.equal((await call('POST', `/api/city/games/${game.id}/mood`, { characterId: 'eleni', mood: 'furious' }, me)).status, 400)
-  const angry = (await call('POST', `/api/city/games/${game.id}/mood`, { characterId: 'eleni', mood: 'offended', reason: 'ты назвал её старой' }, me)).body.game
+  assert.equal((await say(t, '!mood:furious:x', me)).body.game.notebook[0].mood, 'friendly')
+  const angry = (await say(t, '!mood:offended:ты_назвал_её_старой', me)).body.game
   assert.equal(angry.notebook[0].mood, 'offended')
   assert.equal(angry.notebook[0].moodReason, 'ты назвал её старой')
-  const again = await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  assert.match(prompts.at(-1)!, /mood towards the tourist right now: friendly/)
+  await leave(t, me)
+  const again = await talkTo(game.id, 'eleni', me)
   assert.equal(again.status, 200)
-  assert.match(opened[1], /mood towards the tourist right now: offended/)
-  assert.match(opened[1], /already talked to this tourist earlier/)
-  assert.match(opened[1], /Tourist: Πού είναι ο Γιάννης;/)
+  await say(again.body.talkId, 'Συγγνώμη', me)
+  assert.match(prompts.at(-1)!, /mood towards the tourist right now: offended/)
+  assert.match(prompts.at(-1)!, /already talked to this tourist earlier/)
+  assert.match(prompts.at(-1)!, /Tourist: Πού είναι ο Γιάννης;/)
   await close()
 })
 
@@ -349,29 +409,30 @@ test('leaderboard ranks players per category, hides other names, keeps you visib
 })
 
 test('audio tags are stripped from lines; level check is returned and its notes reach the next persona', async () => {
-  const { call, login, opened, close } = await start({
+  const { call, login, talkTo, say, leave, prompts, spoken, close } = await start({
     facts: null,
-    levels: { check: async (_level, lines) => (lines.length > 1 ? [{ index: 1, reason: 'перфект «έχεις κάψει»', note_en: 'Do not use the perfect tense.' }] : []) },
+    levels: { check: async (_level, lines) => lines.flatMap((l, index) => (l.includes('κάψει') ? [{ index, reason: 'перфект «έχεις κάψει»', note_en: 'Do not use the perfect tense.' }] : [])) },
   })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', { level: 'A1' }, me)).body.game
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  const res = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
-    { role: 'agent', text: '[happy] Γεια σου!' },
-    { role: 'agent', text: 'Έχεις κάψει πολύ! [concerned]' },
-  ] }, me)).body
-  assert.deepEqual(res.check, { level: 'A1', total: 2, issues: [{ text: 'Έχεις κάψει πολύ!', reason: 'перфект «έχεις κάψει»' }] })
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  assert.match(opened[1], /too difficult[\s\S]*Do not use the perfect tense/)
-  assert.match(opened[1], /Γεια σου!/)
-  assert.doesNotMatch(opened[1], /\[happy\]/)
-  assert.match(opened[1], /never «εσείς»/)
+  const t = (await talkTo(game.id, 'eleni', me)).body.talkId
+  assert.equal((await say(t, '!tagged', me)).body.reply.text, 'Γεια σου!')
+  await say(t, '!hard', me)
+  assert.ok(spoken.some((x) => x.text === 'Γεια σου!'))
+  const res = (await leave(t, me)).body
+  assert.deepEqual(res.check, { level: 'A1', total: 3, issues: [{ text: 'Έχεις κάψει πολύ!', reason: 'перфект «έχεις κάψει»' }] })
+  const t2 = (await talkTo(game.id, 'eleni', me)).body.talkId
+  await say(t2, 'Γεια', me)
+  assert.match(prompts.at(-1)!, /too difficult[\s\S]*Do not use the perfect tense/)
+  assert.match(prompts.at(-1)!, /Γεια σου!/)
+  assert.doesNotMatch(prompts.at(-1)!, /\[happy\]/)
+  assert.match(prompts.at(-1)!, /never «εσείς»/)
   await close()
 })
 
 test('stripTags and moderated voices', async () => {
   assert.equal(stripTags('[excited] [laugh] Καλώς ήρθατε! [slow]'), 'Καλώς ήρθατε!')
-  const cfg = { apiKey: 'k', agentId: 'a', speed: 1, voices: { el: parseVoices('female-young=bad|good,male=bad') } }
+  const cfg = { apiKey: 'k', speed: 1, sttModel: 's', ttsModel: 't', fallbackVoice: 'f', voices: { el: parseVoices('female-young=bad|good,male=bad') } }
   const fake = (async (u: string) => new Response(JSON.stringify({ sharing: { live_moderation_enabled: u.endsWith('/bad') } }))) as typeof fetch
   assert.deepEqual(await dropModeratedVoices(cfg, fake), ['bad', 'bad'])
   assert.deepEqual(cfg.voices, { el: { 'female-young': ['good'] } })
@@ -419,20 +480,24 @@ test('scene failures are reported and pause generation on billing errors', async
 })
 
 test('residents remember only their own talk within one story, nobody remembers the tourist across stories', async () => {
-  const { call, login, opened, close } = await start({ facts: null })
+  const { call, login, talkTo, say, leave, prompts, close } = await start({ facts: null })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [{ role: 'user', text: 'Με λένε Βαδίμ' }] }, me)
-  await call('POST', `/api/city/games/${game.id}/introduce`, { characterId: 'eleni', target: 'kostas' }, me)
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'kostas', from: 'eleni' }, me)
-  assert.doesNotMatch(opened[1], /Βαδίμ/)
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  assert.match(opened[2], /Tourist: Με λένε Βαδίμ/)
+  const t1 = (await talkTo(game.id, 'eleni', me)).body.talkId
+  await say(t1, 'Με λένε Βαδίμ !intro:kostas', me)
+  await leave(t1, me)
+  const t2 = (await talkTo(game.id, 'kostas', me, { from: 'eleni' })).body.talkId
+  await say(t2, 'Γεια', me)
+  assert.doesNotMatch(prompts.at(-1)!, /Βαδίμ/)
+  await leave(t2, me)
+  const t3 = (await talkTo(game.id, 'eleni', me)).body.talkId
+  await say(t3, 'Γεια', me)
+  assert.match(prompts.at(-1)!, /Tourist: Με λένε Βαδίμ/)
   const next = (await call('POST', '/api/city/games', {}, me)).body.game
-  await call('POST', `/api/city/games/${next.id}/talk`, { characterId: 'eleni' }, me)
-  assert.doesNotMatch(opened[3], /Βαδίμ/)
-  assert.doesNotMatch(opened[3], /already talked to this tourist/)
+  const t4 = (await talkTo(next.id, 'eleni', me)).body.talkId
+  await say(t4, 'Γεια', me)
+  assert.doesNotMatch(prompts.at(-1)!, /Βαδίμ/)
+  assert.doesNotMatch(prompts.at(-1)!, /already talked to this tourist/)
   await close()
 })
 
@@ -467,13 +532,13 @@ test('time of day: from the player hour into the story, residents and scene ligh
   assert.match(scenePrompt(s.characters[0], 'evening'), /sunset/)
   assert.doesNotMatch(scenePrompt(s.characters[0]), /sunset|moon/)
   let asked: string | undefined
-  const { call, login, opened, close } = await start({ scenarios: { generate: async (_l, _r, time) => { asked = time; const sc = validateScenario(scenario()); sc.time_of_day = time; return sc } } })
+  const { call, login, talkTo, say, prompts, close } = await start({ scenarios: { generate: async (_l, _r, time) => { asked = time; const sc = validateScenario(scenario()); sc.time_of_day = time; return sc } } })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', { hour: 22 }, me)).body.game
   assert.ok(['morning', 'noon', 'evening', 'night'].includes(String(asked)))
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
+  await say((await talkTo(game.id, 'eleni', me)).body.talkId, 'Γεια', me)
   const { TIME_EN } = await import('./scenario.ts')
-  assert.ok(opened[0].includes(`Time of day: ${TIME_EN[asked as keyof typeof TIME_EN]}`))
+  assert.ok(prompts[0].includes(`Time of day: ${TIME_EN[asked as keyof typeof TIME_EN]}`))
   await close()
 })
 
@@ -503,22 +568,36 @@ test('access code: listed accounts with a code unlock the city once; wrong codes
   await close()
 })
 
-test('resuming after a silence pause continues the same talk without counting it', async () => {
-  const { call, login, opened, close } = await start({ dailyTalks: 1 })
+test('turns: each line and the whole talk are priced, empty speech and bad audio are handled, sessions are personal', async () => {
+  const { call, login, talkTo, say, leave, close } = await start({ dailyTalks: 1, allowedUsers: ['Vadim', 'Anna'] })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
-  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'voice' }, me)).status, 409)
-  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)).status, 200)
-  const back = await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'voice' }, me)
-  assert.equal(back.status, 200)
-  assert.equal((back.body.session.connection as { token: string }).token, 't')
-  assert.match(opened[1], /short pause\. Continue naturally/)
-  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni', resume: 'tap' }, me)).status, 200)
-  assert.equal((await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)).status, 429)
-  const { buildPersona } = await import('./scenario.ts')
-  const s = validateScenario(scenario())
-  assert.equal(buildPersona(s, 'eleni', 'A1', { met: ['eleni'], cameFrom: null, mood: 'friendly', previous: [], resume: 'voice' }).firstMessage, 'Συγγνώμη, δεν σε άκουσα. Τι είπες;')
-  assert.equal(buildPersona(s, 'eleni', 'A1', { met: ['eleni'], cameFrom: null, mood: 'friendly', previous: [], resume: 'tap' }).firstMessage, 'Ναι;')
+  const opened = (await talkTo(game.id, 'eleni', me)).body
+  assert.ok(Math.abs(opened.reply.cost - 0.0005) < 1e-9)
+  assert.equal(opened.total, opened.reply.cost)
+  assert.equal(opened.spent, opened.reply.cost)
+  assert.equal((await talkTo(game.id, 'eleni', me)).status, 429)
+  const t = opened.talkId
+  const turn = (await say(t, 'Καλημέρα', me)).body
+  assert.equal(turn.heard, 'Καλημέρα')
+  assert.equal(turn.reply.text, 'Εντάξει.')
+  assert.ok(Math.abs(turn.cost - (0.0015 + (3 / 3600) * 0.4 + 0.0008)) < 1e-6)
+  assert.equal(turn.reply.cost, turn.cost)
+  assert.ok(Math.abs(turn.total - (opened.total + turn.cost)) < 1e-6)
+  const silent = (await say(t, ' '.repeat(10), me)).body
+  assert.equal(silent.heard, '')
+  assert.equal(silent.reply, null)
+  assert.ok(silent.cost > 0 && silent.cost < 0.001)
+  assert.equal((await say(t, '', me)).status, 400)
+  assert.equal((await say(t, 'Γεια', me, {}, 'text/plain')).status, 415)
+  const anna = await login('Anna')
+  assert.equal((await say(t, 'Γεια', anna)).status, 410)
+  const bye = (await say(t, 'Αντίο !end', me)).body
+  assert.equal(bye.ended, true)
+  assert.equal(bye.walkedAway, false)
+  const left = (await leave(t, me)).body
+  assert.ok(left.spent >= left.total)
+  assert.equal((await say(t, 'Γεια', me)).status, 410)
   await close()
 })
 
@@ -547,7 +626,7 @@ test('story pool: three level queues kept full in the background, a new task is 
 
 async function startWithDb(overrides: Partial<CityDeps>) {
   const db = openDb(':memory:')
-  const deps: CityDeps = { allowedUsers: ['Vadim'], dailyTalks: 10, scenarios: null, facts: null, translator: null, voice: null, scenes: null, ...overrides }
+  const deps: CityDeps = { allowedUsers: ['Vadim'], dailyTalks: 10, scenarios: null, facts: null, translator: null, speech: null, talker: null, scenes: null, ...overrides }
   const server = createServer(createApp(db, SECRET, deps))
   await new Promise<void>((r) => server.listen(0, r))
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -590,7 +669,7 @@ test('pool sizes per level', async () => {
 
 test('each learning language has its own town, game, score and hint language', async () => {
   const generated: string[] = []
-  const { call, login, opened, close } = await start({
+  const { call, login, talkTo, say, prompts, close } = await start({
     scenarios: { generate: async (_level, _goals, _time, lang) => { generated.push(lang ?? '?'); return validateScenario({ ...scenario(), goal_en: 'Ask the fisherman', goal_ru: 'Спроси рыбака' }) } },
   })
   const me = await login('Vadim')
@@ -604,10 +683,10 @@ test('each learning language has its own town, game, score and hint language', a
   assert.equal(game.goalHint, 'Спроси рыбака')
   assert.equal((await call('GET', '/api/city/games/current', undefined, me)).body.game, null)
   assert.equal((await call('GET', '/api/city/games/current', undefined, me, en)).body.game.id, game.id)
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me, en)
-  assert.match(opened[0], /Speak ONLY English/)
-  assert.match(opened[0], /living in Mythmouth/)
-  assert.match(opened[0], /the reason: in Russian/)
+  await say((await talkTo(game.id, 'eleni', me, {}, en)).body.talkId, 'Hi', me, en)
+  assert.match(prompts[0], /Speak ONLY English/)
+  assert.match(prompts[0], /living in Mythmouth/)
+  assert.match(prompts[0], /the reason: in Russian/)
   const toEn = { 'X-City-Lang': 'en', 'X-City-Hint': 'el' }
   const inGreek = (await call('GET', '/api/city/games/current', undefined, me, toEn)).body.game
   assert.equal(inGreek.goalHint, 'el:Спроси рыбака')
@@ -618,16 +697,14 @@ test('each learning language has its own town, game, score and hint language', a
 
 test('people the resident told about are found in the transcript even without the introduce tool', async () => {
   let offered: string[] = []
-  const { call, login, close } = await start({
+  const { call, login, talkTo, say, leave, close } = await start({
     facts: { match: async (_s, _l, _f, people) => { offered = people.map((p) => p.id); return { facts: [], people: ['yiannis'] } } },
   })
   const me = await login('Vadim')
   const game = (await call('POST', '/api/city/games', {}, me)).body.game
-  await call('POST', `/api/city/games/${game.id}/talk`, { characterId: 'eleni' }, me)
-  const after = (await call('POST', `/api/city/games/${game.id}/lines`, { characterId: 'eleni', lines: [
-    { role: 'user', text: 'Πού είναι ο ψαράς;' },
-    { role: 'agent', text: 'Ο Γιάννης είναι στο λιμάνι.' },
-  ] }, me)).body.game
+  const t = (await talkTo(game.id, 'eleni', me)).body.talkId
+  await say(t, 'Πού είναι ο ψαράς; !say:Ο_Γιάννης_είναι_στο_λιμάνι.', me)
+  const after = (await leave(t, me)).body.game
   assert.deepEqual(offered.sort(), ['kostas', 'yiannis'])
   assert.deepEqual(after.notebook.map((p: { id: string }) => p.id), ['eleni', 'yiannis'])
   const { buildPersona } = await import('./scenario.ts')

@@ -27,14 +27,18 @@ const MESSAGES = {
     en: 'You do not know yet where to find this resident',
     el: 'Δεν ξέρεις ακόμα πού θα βρεις αυτόν τον κάτοικο',
   },
-  notMet: { ru: 'С этим жителем ты ещё не говорил', en: 'You have not talked to this resident yet', el: 'Δεν έχεις μιλήσει ακόμα με αυτόν τον κάτοικο' },
   talkLimit: {
     ru: 'На сегодня разговоров достаточно, город отдыхает до завтра',
     en: 'That is enough talking for today, the town is resting until tomorrow',
     el: 'Αρκετές κουβέντες για σήμερα, η πόλη ξεκουράζεται μέχρι αύριο',
   },
-  unknownMood: { ru: 'Неизвестное настроение', en: 'Unknown mood', el: 'Άγνωστη διάθεση' },
-  cannotFinish: { ru: 'Этот житель не может закрыть задание', en: 'This resident cannot complete the task', el: 'Αυτός ο κάτοικος δεν μπορεί να ολοκληρώσει την αποστολή' },
+  talkGone: {
+    ru: 'Разговор прервался, подойди к жителю снова',
+    en: 'The conversation was interrupted, go up to the resident again',
+    el: 'Η συζήτηση διακόπηκε, πήγαινε ξανά στον κάτοικο',
+  },
+  talkBusy: { ru: 'Житель ещё отвечает', en: 'The resident is still answering', el: 'Ο κάτοικος απαντάει ακόμα' },
+  noSpeech: { ru: 'Не получилось записать фразу', en: 'Could not record the phrase', el: 'Η φράση δεν ηχογραφήθηκε' },
 } satisfies Record<string, Record<Lang, string>>
 
 export type MessageKey = keyof typeof MESSAGES

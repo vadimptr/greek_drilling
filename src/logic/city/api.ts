@@ -66,20 +66,37 @@ export interface CityGame {
   characters: CharacterCard[]
 }
 
-export interface VoiceSession {
-  provider: string
-  connection: Record<string, unknown>
+export interface Reply {
+  text: string
+  audio: string | null
+  cost: number
 }
 
-export interface Talk {
+export interface Spend {
+  total: number
+  spent: number
+}
+
+export interface TalkOpen extends Spend {
   character: CharacterCard
-  session: VoiceSession
+  talkId: string
+  reply: Reply
+  game: CityGame
+}
+
+export interface Turn extends Spend {
+  heard: string
+  reply: Reply | null
+  ended: boolean
+  walkedAway: boolean
+  cost: number
   game: CityGame
 }
 
 export interface Line {
   role: 'user' | 'agent'
   text: string
+  cost?: number
 }
 
 export class CityError extends Error {
@@ -90,7 +107,7 @@ export class CityError extends Error {
   }
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function call<T>(method: string, path: string, body?: unknown, raw?: { blob: Blob; headers: Record<string, string> }): Promise<T> {
   let res: Response
   try {
     res = await fetch(path, {
@@ -99,8 +116,9 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
         'X-City-Lang': langs.learn,
         'X-City-Hint': langs.hint,
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...(raw ? { 'Content-Type': raw.blob.type || 'audio/webm', ...raw.headers } : {}),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: raw ? raw.blob : body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
     throw new CityError(0, translate(langs.hint, 'city.offline'))
@@ -143,26 +161,20 @@ export const leaderboard = () => call<{ boards: Board[] }>('GET', '/api/city/lea
 export const currentGame = () => call<{ game: CityGame | null }>('GET', '/api/city/games/current').then((r) => r.game)
 export const newGame = (level: Level) =>
   call<{ game: CityGame }>('POST', '/api/city/games', { level, lang: langs.learn }).then((r) => r.game)
-export const talk = (gameId: string, characterId: string, from: string | null, speed: number, resume?: 'voice' | 'tap') =>
-  call<Talk>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed, resume })
+export const talk = (gameId: string, characterId: string, from: string | null, speed: number) =>
+  call<TalkOpen>('POST', `/api/city/games/${gameId}/talk`, { characterId, from, speed })
+export const say = (talkId: string, blob: Blob, ms: number) =>
+  call<Turn>('POST', `/api/city/talks/${talkId}/say`, undefined, { blob, headers: { 'X-Audio-Ms': String(Math.round(ms)) } })
 export interface LevelCheck {
   level: string
   total: number
   issues: { text: string; reason: string }[]
 }
 
-export const saveLines = (gameId: string, characterId: string, lines: Line[]) =>
-  call<{ game: CityGame; check: LevelCheck | null }>('POST', `/api/city/games/${gameId}/lines`, { characterId, lines })
-export const introduce = (gameId: string, characterId: string, target: string) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/introduce`, { characterId, target }).then((r) => r.game)
+export const leaveTalk = (talkId: string) =>
+  call<Spend & { game: CityGame; check: LevelCheck | null }>('POST', `/api/city/talks/${talkId}/leave`, {})
 export const requestScene = (gameId: string, characterId: string) =>
   call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/scene`, { characterId }).then((r) => r.game)
-export const setMood = (gameId: string, characterId: string, mood: string, reason: string) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/mood`, { characterId, mood, reason }).then((r) => r.game)
-export const revealFacts = (gameId: string, characterId: string, factIds: string[]) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/facts`, { characterId, factIds }).then((r) => r.game)
-export const completeGame = (gameId: string, characterId: string) =>
-  call<{ game: CityGame }>('POST', `/api/city/games/${gameId}/complete`, { characterId }).then((r) => r.game)
 
 const translations = new Map<string, Promise<string>>()
 

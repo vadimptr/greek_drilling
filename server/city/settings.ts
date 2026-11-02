@@ -22,7 +22,7 @@ export interface Setting {
   levelRules: string
   address: string
   regreeting: Record<Mood, string[]>
-  resume: { voice: string; tap: string }
+  resume: { tap: string }
   goodbye: string
   together: string
   unclear: string
@@ -83,7 +83,7 @@ Always informal «εσύ»; formal «εσείς» breaks the rules.`,
     offended: ['Εσύ πάλι… Τι θέλεις;', 'Δεν έχω πολύ χρόνο. Τι θέλεις;'],
     angry: ['Εσύ; Δεν θέλω να σου μιλήσω.', 'Φύγε, σε παρακαλώ. Δεν έχω όρεξη.'],
   },
-  resume: { voice: 'Συγγνώμη, δεν σε άκουσα. Τι είπες;', tap: 'Ναι;' },
+  resume: { tap: 'Ναι;' },
   goodbye: '«Άντε, καλή τύχη!», «Τα λέμε!»',
   together: '«πάμε μαζί», «έλα μαζί μου», «θα σε πάω»',
   unclear: '«Συγγνώμη;», «Τι εννοείς;»',
@@ -156,7 +156,7 @@ Everybody knows everybody, people are friendly and chatty with visitors, love ta
     offended: ['Oh. It is you. What do you want?', 'I am busy. What is it?'],
     angry: ['You? I do not want to talk to you.', 'Please go away. I am not in the mood.'],
   },
-  resume: { voice: 'Sorry, I did not hear you. What did you say?', tap: 'Yes?' },
+  resume: { tap: 'Yes?' },
   goodbye: '"Good luck!", "See you!", "Bye now!"',
   together: '"let\'s go together", "come with me", "I\'ll take you there"',
   unclear: '"Sorry?", "What do you mean?"',
@@ -230,7 +230,7 @@ Always informal «ты»; formal «вы» to the tourist breaks the rules.`,
     offended: ['А, это ты… Что тебе нужно?', 'У меня мало времени. Что тебе?'],
     angry: ['Ты? Не хочу с тобой говорить.', 'Уходи, пожалуйста. Нет настроения.'],
   },
-  resume: { voice: 'Извини, плохо слышно. Повтори, пожалуйста?', tap: 'Да?' },
+  resume: { tap: 'Да?' },
   goodbye: '«Ну, удачи!», «Пока!», «Счастливо!»',
   together: '«пойдём вместе», «пошли со мной», «я тебя отведу»',
   unclear: '«Что-что?», «Это как?»',

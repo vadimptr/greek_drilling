@@ -273,10 +273,7 @@ export function card(s: Scenario, c: Character, hint: Lang): CharacterCard {
 
 const AGE_EN: Record<Age, string> = { young: 'young', middle: 'middle-aged', old: 'elderly' }
 
-export type Resume = 'voice' | 'tap'
-
 export interface Meeting {
-  resume?: Resume
   levelNotes?: string[]
   met: string[]
   cameFrom: string | null
@@ -299,7 +296,7 @@ const REASON_EXAMPLE: Record<Lang, string> = {
 }
 
 export function buildPersona(s: Scenario, characterId: string, level: Level, meeting: Meeting): Persona {
-  const { met, cameFrom, mood, previous, levelNotes = [], resume, hint = 'ru' } = meeting
+  const { met, cameFrom, mood, previous, levelNotes = [], hint = 'ru' } = meeting
   const lang = langOf(s)
   const set = settingOf(lang)
   const language = LANGUAGE_EN[lang]
@@ -326,24 +323,14 @@ As soon as the tourist has actually obtained or found out all of that from you, 
   const history = [
     metNames.length ? `The tourist has already talked to: ${metNames.join(', ')}.` : 'This is the first person the tourist talks to in town.',
     cameFrom ? `They have just come to you after talking to ${name(byId(cameFrom))}.` : '',
-    resume
-      ? 'You are in the middle of a conversation with this tourist; there was just a short pause. Continue naturally from where you stopped, do not greet again.'
-      : again
-        ? 'You have already talked to this tourist earlier today; they are coming back to you.'
-        : '',
+    again ? 'You have already talked to this tourist earlier today; they are coming back to you.' : '',
   ].filter(Boolean).join(' ')
   const earlier = previous.length
     ? `\nYour earlier conversation with this tourist (most recent lines):\n${previous.map((l) => `${l.role === 'agent' ? 'You' : 'Tourist'}: ${l.text}`).join('\n')}\n`
     : ''
   const greetings = set.regreeting[mood]
   const firstMessage =
-    resume === 'voice'
-      ? set.resume.voice
-      : resume === 'tap'
-        ? set.resume.tap
-        : again || mood !== 'friendly'
-          ? greetings[Math.floor(Math.random() * greetings.length)]
-          : (c.greeting ?? c.greeting_el ?? set.resume.tap)
+    again || mood !== 'friendly' ? greetings[Math.floor(Math.random() * greetings.length)] : (c.greeting ?? c.greeting_el ?? set.resume.tap)
   const others = LANGS.filter((l) => l !== lang).map((l) => LANGUAGE_EN[l]).join(', ')
 
   const systemPrompt = `You are ${name(c)}, a ${AGE_EN[c.age]} ${c.gender === 'male' ? 'man' : 'woman'} living in ${set.city}: ${role(c)}.
