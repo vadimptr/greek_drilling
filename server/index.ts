@@ -59,7 +59,7 @@ const ambience = new AmbienceStore(join(dataDir, 'city-ambience'), env.ELEVENLAB
 
 const port = Number(env.PORT ?? 3000)
 const db = openDb(env.DB_PATH ?? 'data/gd.db')
-const server = createServer(createApp(db, secret, { ...city, scenes, ambience }))
+const server = createServer(createApp(db, secret, { ...city, scenes, ambience, debugDir: join(dataDir, 'city-unheard') }))
 server.listen(port, () => console.log(`api on :${port}`))
 
 const stop = () => server.close(() => { db.close(); process.exit(0) })

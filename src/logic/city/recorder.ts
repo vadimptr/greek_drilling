@@ -3,6 +3,7 @@ const TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;c
 export interface Recording {
   blob: Blob
   ms: number
+  peak: number | null
 }
 
 export class Recorder {
@@ -10,11 +11,42 @@ export class Recorder {
   private rec: MediaRecorder | null = null
   private chunks: Blob[] = []
   private startedAt = 0
+  private ctx: AudioContext | null = null
+  private analyser: AnalyserNode | null = null
+  private samples: Float32Array<ArrayBuffer> | null = null
+  private peak = 0
+
+  prepare(): void {
+    try {
+      this.ctx ??= new AudioContext()
+      void this.ctx.resume().catch(() => undefined)
+    } catch {
+      this.ctx = null
+    }
+  }
+
+  level(): number {
+    if (!this.analyser || !this.samples || this.ctx?.state !== 'running') return 0
+    this.analyser.getFloatTimeDomainData(this.samples)
+    let sum = 0
+    for (const v of this.samples) sum += v * v
+    const rms = Math.sqrt(sum / this.samples.length)
+    this.peak = Math.max(this.peak, rms)
+    return rms
+  }
 
   async start(): Promise<void> {
     if (!this.stream || this.stream.getAudioTracks().every((t) => t.readyState === 'ended')) {
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      this.analyser = null
     }
+    if (this.ctx && !this.analyser) {
+      this.analyser = this.ctx.createAnalyser()
+      this.analyser.fftSize = 1024
+      this.samples = new Float32Array(this.analyser.fftSize)
+      this.ctx.createMediaStreamSource(this.stream).connect(this.analyser)
+    }
+    this.peak = 0
     const mimeType = TYPES.find((t) => MediaRecorder.isTypeSupported(t))
     const rec = new MediaRecorder(this.stream, mimeType ? { mimeType } : undefined)
     this.chunks = []
@@ -33,10 +65,12 @@ export class Recorder {
   stop(): Promise<Recording> {
     const rec = this.rec
     this.rec = null
-    if (!rec || rec.state === 'inactive') return Promise.resolve({ blob: new Blob(), ms: 0 })
+    if (!rec || rec.state === 'inactive') return Promise.resolve({ blob: new Blob(), ms: 0, peak: null })
     const ms = performance.now() - this.startedAt
+    this.level()
+    const peak = this.ctx?.state === 'running' && this.analyser ? this.peak : null
     return new Promise((resolve) => {
-      rec.onstop = () => resolve({ blob: new Blob(this.chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] }), ms })
+      rec.onstop = () => resolve({ blob: new Blob(this.chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] }), ms, peak })
       rec.stop()
     })
   }
@@ -46,6 +80,7 @@ export class Recorder {
     this.rec = null
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
+    this.analyser = null
   }
 }
 

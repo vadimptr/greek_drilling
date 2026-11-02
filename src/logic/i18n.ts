@@ -123,6 +123,11 @@ const UI = {
   'city.recording': { ru: '🔴 Говори — отпусти, когда закончишь', en: '🔴 Speak — release when you are done', el: '🔴 Μίλα — άφησέ το όταν τελειώσεις' },
   'city.thinking': { ru: '{name} думает…', en: '{name} is thinking…', el: '{name} σκέφτεται…' },
   'city.notHeard': { ru: 'Не расслышал, скажи ещё раз', en: 'Did not catch that, say it again', el: 'Δεν άκουσα, πες το ξανά' },
+  'city.silentMic': {
+    ru: 'Микрофон не слышит звука — проверь, какой микрофон выбран в браузере и системе',
+    en: 'The microphone hears nothing — check which microphone is selected in the browser and the system',
+    el: 'Το μικρόφωνο δεν ακούει τίποτα — έλεγξε ποιο μικρόφωνο είναι επιλεγμένο στον browser και στο σύστημα',
+  },
   'city.tooShort': { ru: 'Держи кнопку, пока говоришь', en: 'Keep holding the button while you speak', el: 'Κράτα το κουμπί όσο μιλάς' },
   'city.cost': { ru: 'реплика {turn} · разговор {talk} · задание {game}', en: 'line {turn} · talk {talk} · task {game}', el: 'φράση {turn} · συζήτηση {talk} · αποστολή {game}' },
   'city.holdAria': { ru: 'Зажми и говори', en: 'Hold to speak', el: 'Κράτα και μίλα' },

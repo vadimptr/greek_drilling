@@ -32,6 +32,7 @@ interface Props {
 const SUBS_KEY = 'greek_drilling.city.subs'
 const WALK_MS = 1200
 const MIN_SPEECH_MS = 400
+const SILENT_PEAK = 0.008
 const FRESH_MS = 4000
 const SCENE_POLL_MS = 2000
 const SCENE_WAIT_MS = 180_000
@@ -107,6 +108,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
   const [cost, setCost] = useState<{ turn: number | null; talk: number; game: number } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [walkingId, setWalkingId] = useState<string | null>(null)
+  const micRef = useRef<HTMLButtonElement | null>(null)
   const callSeq = useRef(0)
 
   const setTurn = (next: TurnState) => {
@@ -319,10 +321,15 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
     if (turnRef.current !== 'recording') return
     const seq = callSeq.current
     const talkId = talkRef.current
-    const { blob, ms } = await recorder.current.stop()
+    const { blob, ms, peak } = await recorder.current.stop()
     if (seq !== callSeq.current || !talkId) return
     if (ms < MIN_SPEECH_MS || blob.size < 500) {
       setNotice(t('city.tooShort'))
+      setTurn('ready')
+      return
+    }
+    if (peak !== null && peak < SILENT_PEAK) {
+      setNotice(t('city.silentMic'))
       setTurn('ready')
       return
     }
@@ -351,11 +358,27 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
   }
 
   useEffect(() => {
+    if (turn !== 'recording') {
+      micRef.current?.style.removeProperty('--level')
+      return
+    }
+    let frame = 0
+    const tick = () => {
+      micRef.current?.style.setProperty('--level', Math.min(1, recorder.current.level() * 8).toFixed(3))
+      frame = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(frame)
+  }, [turn])
+
+  useEffect(() => {
     if (phase !== 'talking') return
     const typing = (e: KeyboardEvent) => e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || e.repeat || typing(e)) return
       e.preventDefault()
+      player.current.unlock()
+      recorder.current.prepare()
       void press()
     }
     const up = (e: KeyboardEvent) => {
@@ -611,6 +634,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
               )}
             </div>
             <button
+              ref={micRef}
               className={micClass}
               onClick={onMic}
               onPointerDown={(e) => {
@@ -618,6 +642,7 @@ export function CityScreen({ allowed, lang, signedIn, needsCode, onUnlocked, lev
                 e.preventDefault()
                 e.currentTarget.setPointerCapture(e.pointerId)
                 player.current.unlock()
+                recorder.current.prepare()
                 void press()
               }}
               onPointerUp={() => void release()}

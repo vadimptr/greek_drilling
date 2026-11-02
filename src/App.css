@@ -1036,3 +1036,4 @@
 .mic-hold { animation: none; }
 .mic-waiting { animation: mic-wait 1s ease-in-out infinite; }
 @keyframes mic-wait { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.city-dock .mic-listening { animation: none; box-shadow: 0 0 0 calc(var(--level, 0) * 26px) color-mix(in srgb, var(--bad) 35%, transparent), 0 8px 24px color-mix(in srgb, var(--bad) 40%, transparent); transition: box-shadow 60ms linear; }

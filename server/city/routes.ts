@@ -5,6 +5,8 @@ import { nameKey } from '../db.ts'
 import { HttpError, readBody, readJson, send } from '../http.ts'
 import { issue, readCookie, verify } from '../session.ts'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { addClaude, addCost, addStt, addTts, DEFAULT_PRICES, noCost, type Cost, type Prices } from './costs.ts'
 import { imageType, Timing, type SceneStore } from './images.ts'
 import { ambienceKey, ambienceKeysOf, ambienceOf, type AmbienceStore } from './ambience.ts'
@@ -32,6 +34,7 @@ export interface CityDeps {
   speech: SpeechProvider | null
   talker: Talker | null
   prices?: Prices
+  debugDir?: string
   scenes: SceneStore | null
   ambience?: AmbienceStore | null
 }
@@ -321,11 +324,25 @@ export function createCity(db: DatabaseSync, deps: CityDeps, secret = 'city') {
     return { text, audio: spoken.audio.toString('base64') }
   }
 
+  const keepUnheard = (audio: Buffer, type: string) => {
+    if (!deps.debugDir) return
+    try {
+      mkdirSync(deps.debugDir, { recursive: true })
+      const ext = type.includes('mp4') ? 'mp4' : type.includes('ogg') ? 'ogg' : type.includes('mpeg') ? 'mp3' : 'webm'
+      writeFileSync(join(deps.debugDir, `${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`), audio)
+      readdirSync(deps.debugDir).sort().slice(0, -10).forEach((f) => rmSync(join(deps.debugDir!, f)))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const sayTurn = async (game: Game, session: TalkSession, audio: Buffer, type: string, declaredSeconds: number, hint: Lang) => {
     const cost = noCost()
     const heard = await deps.speech!.transcribe(audio, type, game.lang)
     addStt(cost, prices, Math.max(declaredSeconds, heard.seconds))
     const said = stripTags(heard.text).slice(0, MAX_LINE)
+    console.log(`city say: ${audio.length} bytes ${type} ${declaredSeconds.toFixed(1)} s, heard ${said.length} chars`)
+    if (!said) keepUnheard(audio, type)
     if (!said || game.status !== 'active') {
       addCost(session.cost, cost)
       recordCost(db, game, session.characterId, 'turn', cost)
