@@ -143,23 +143,30 @@ export function SpellScreen({ state, words, onChange }: Props) {
       <div className="trainer-card">
       <div key={`${task.word.id}-${task.kind}-${answer ? (answer.correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
         <div className="spell-ru">{task.word.ru}</div>
-        <div className={sizeClass}>
-          {groups.map((group, gi) => (
-            <div key={gi} className="spell-word">
-              {group.map((i) => (
-                <button
-                  key={i}
-                  className={tileClass(i)}
-                  disabled={!tappable || task.tokens[i] === ''}
-                  onClick={() => tappable && submit({ index: i })}
-                  aria-label={task.tokens[i] || 'пропуск'}
-                >
-                  {tileText(i)}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+        <span className="spell-anchor">
+          <div className={sizeClass}>
+            {groups.map((group, gi) => (
+              <div key={gi} className="spell-word">
+                {group.map((i) => (
+                  <button
+                    key={i}
+                    className={tileClass(i)}
+                    disabled={!tappable || task.tokens[i] === ''}
+                    onClick={() => tappable && submit({ index: i })}
+                    aria-label={task.tokens[i] || 'пропуск'}
+                  >
+                    {tileText(i)}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+          {speechAvailable && (
+            <button className="speak-btn spell-speak" onClick={() => speak(task.word.el)} aria-label="Послушать">
+              🔊
+            </button>
+          )}
+        </span>
         <div className="spell-task">
           {!answer && TASK_TEXT[task.kind]}
           {answer && answer.correct && <span className="speak-ok">✓ Верно!</span>}
@@ -201,11 +208,6 @@ export function SpellScreen({ state, words, onChange }: Props) {
           </div>
         )}
         <div className="spell-row">
-          {speechAvailable && (
-            <button className="secondary-btn" onClick={() => speak(task.word.el)}>
-              🔊 Послушать
-            </button>
-          )}
           {answer && !answer.correct && (
             <button className="primary-btn" onClick={() => advance(state)}>
               Дальше

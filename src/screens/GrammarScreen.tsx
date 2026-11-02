@@ -131,18 +131,20 @@ export function GrammarScreen({ state, level, onChange }: Props) {
   if (mode === 'done' && doneLesson) {
     const nextLesson = lessons.find((l) => l.id === doneLesson.id + 1)
     return (
-      <main className="done">
-        <div className="done-emoji">🎯</div>
-        <h1 className="done-title">Урок {doneLesson.id} пройден!</h1>
-        <p className="done-sub">{doneLesson.title}</p>
-        {nextLesson && (
-          <button className="primary-btn" onClick={() => openLesson(nextLesson)}>
-            Следующий: {nextLesson.title}
+      <main className="nouns trainer">
+        <div className="trainer-card done">
+          <div className="done-emoji">🎯</div>
+          <h1 className="done-title">Урок {doneLesson.id} пройден!</h1>
+          <p className="done-sub">{doneLesson.title}</p>
+          {nextLesson && (
+            <button className="primary-btn trainer-next" onClick={() => openLesson(nextLesson)}>
+              Следующий: {nextLesson.title}
+            </button>
+          )}
+          <button className="secondary-btn trainer-next" onClick={() => setMode('list')}>
+            К списку уроков
           </button>
-        )}
-        <button className="secondary-btn" onClick={() => setMode('list')}>
-          К списку уроков
-        </button>
+        </div>
       </main>
     )
   }

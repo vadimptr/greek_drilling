@@ -122,7 +122,7 @@ export function NounsScreen({ state, onChange }: Props) {
 
   const { task, word } = cur
   const gender = genderOf(task.entry)
-  const cardClass = result === null ? 'nouns-card' : result ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
+  const cardClass = result === null ? 'trainer-prompt' : result ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad'
   const answered = result !== null
 
   const valid = task.kind === 'identify' ? task.valid : []
@@ -151,127 +151,138 @@ export function NounsScreen({ state, onChange }: Props) {
     )
 
   return (
-    <main className="nouns">
-      <div key={`${word.id}-${task.kind}-${result === null ? '' : result ? 'ok' : 'bad'}`} className={cardClass}>
-        <div className="spell-ru">{word.ru}</div>
-        {task.kind === 'identify' ? (
-          <>
-            <div className="nouns-form">{task.shown}</div>
-            <div className="spell-task">
-              {!answered && 'В какой форме стоит слово?'}
-              {answered && result && <span className="speak-ok">✓ Верно: {describeAnalyses(task.entry, task.valid)}</span>}
-              {answered && !result && (
-                <span className="spell-answer">
-                  <span className="speak-bad">✗</span> Это {describeAnalyses(task.entry, task.valid)}
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="nouns-form">{task.source}</div>
-            <div className="nouns-arrow">
-              → {CASE_LABEL[task.target.c]} падеж, {NUM_LABEL[task.target.n]} число
-            </div>
-            <div className="spell-task">
-              {!answered && 'Выбери нужную форму'}
-              {answered && result && <span className="speak-ok">✓ Верно: {withArticle(task.entry, task.target.c, task.target.n)}</span>}
-              {answered && !result && (
-                <span className="spell-answer">
-                  <span className="speak-bad">✗</span> Правильно:{' '}
-                  <span className="spell-correct">{withArticle(task.entry, task.target.c, task.target.n)}</span>
-                </span>
-              )}
-            </div>
-          </>
-        )}
-      </div>
+    <main className="nouns trainer">
+      <div className="trainer-card">
+        <div key={`${word.id}-${task.kind}-${result === null ? '' : result ? 'ok' : 'bad'}`} className={cardClass}>
+          <div className="spell-ru">{word.ru}</div>
+          {task.kind === 'identify' ? (
+            <>
+              <span className="prompt-anchor">
+                <div className="nouns-form">{task.shown}</div>
+                {speechAvailable && (
+                  <button className="speak-btn prompt-speak" onClick={() => speak(task.shown)} aria-label="Послушать">
+                    🔊
+                  </button>
+                )}
+              </span>
+              <div className="spell-task">
+                {!answered && 'В какой форме стоит слово?'}
+                {answered && result && <span className="speak-ok">✓ Верно: {describeAnalyses(task.entry, task.valid)}</span>}
+                {answered && !result && (
+                  <span className="spell-answer">
+                    <span className="speak-bad">✗</span> Это {describeAnalyses(task.entry, task.valid)}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="prompt-anchor">
+                <div className="nouns-form">{task.source}</div>
+                {speechAvailable && (
+                  <button className="speak-btn prompt-speak" onClick={() => speak(task.source)} aria-label="Послушать">
+                    🔊
+                  </button>
+                )}
+              </span>
+              <div className="nouns-arrow">
+                → {CASE_LABEL[task.target.c]} падеж, {NUM_LABEL[task.target.n]} число
+              </div>
+              <div className="spell-task">
+                {!answered && 'Выбери нужную форму'}
+                {answered && result && <span className="speak-ok">✓ Верно: {withArticle(task.entry, task.target.c, task.target.n)}</span>}
+                {answered && !result && (
+                  <span className="spell-answer">
+                    <span className="speak-bad">✗</span> Правильно:{' '}
+                    <span className="spell-correct">{withArticle(task.entry, task.target.c, task.target.n)}</span>
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
-      <div className="spell-bottom">
-        {task.kind === 'identify' && (
-          <>
-            <div className="nouns-row">
-              {rowLabel('Род', gOk)}
-              <div className="segmented seg-3">
-                {GENDERS.map((g) => (
-                  <button key={g} className={segClass(g, choice.g, (v) => v === gender)} disabled={answered} onClick={() => setChoice({ ...choice, g })}>
-                    {segText(g, choice.g, (v) => v === gender, GENDER_SHORT[g])}
-                  </button>
-                ))}
+        <div className="spell-bottom trainer-answers">
+          {task.kind === 'identify' && (
+            <>
+              <div className="nouns-row">
+                {rowLabel('Род', gOk)}
+                <div className="segmented seg-3">
+                  {GENDERS.map((g) => (
+                    <button key={g} className={segClass(g, choice.g, (v) => v === gender)} disabled={answered} onClick={() => setChoice({ ...choice, g })}>
+                      {segText(g, choice.g, (v) => v === gender, GENDER_SHORT[g])}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="nouns-row">
-              {rowLabel('Падеж', cOk)}
-              <div className="segmented seg-3">
-                {CASE_ORDER.map((c) => (
-                  <button
-                    key={c}
-                    className={segClass(c, choice.c, caseRight)}
-                    disabled={answered}
-                    onClick={() => setChoice({ ...choice, c })}
-                  >
-                    {segText(c, choice.c, caseRight, CASE_SHORT[c])}
-                  </button>
-                ))}
+              <div className="nouns-row">
+                {rowLabel('Падеж', cOk)}
+                <div className="segmented seg-3">
+                  {CASE_ORDER.map((c) => (
+                    <button
+                      key={c}
+                      className={segClass(c, choice.c, caseRight)}
+                      disabled={answered}
+                      onClick={() => setChoice({ ...choice, c })}
+                    >
+                      {segText(c, choice.c, caseRight, CASE_SHORT[c])}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="nouns-row">
-              {rowLabel('Число', nOk)}
-              <div className="segmented">
-                {NUMS.map((n) => (
-                  <button
-                    key={n}
-                    className={segClass(n, choice.n, numRight)}
-                    disabled={answered}
-                    onClick={() => setChoice({ ...choice, n })}
-                  >
-                    {segText(n, choice.n, numRight, NUM_SHORT[n])}
-                  </button>
-                ))}
+              <div className="nouns-row">
+                {rowLabel('Число', nOk)}
+                <div className="segmented">
+                  {NUMS.map((n) => (
+                    <button
+                      key={n}
+                      className={segClass(n, choice.n, numRight)}
+                      disabled={answered}
+                      onClick={() => setChoice({ ...choice, n })}
+                    >
+                      {segText(n, choice.n, numRight, NUM_SHORT[n])}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {!answered && (
+                <button className="primary-btn" disabled={!choice.g || !choice.c || !choice.n} onClick={checkIdentifyChoice}>
+                  Проверить
+                </button>
+              )}
+            </>
+          )}
+
+          {task.kind === 'transform' && (
+            <div className="options">
+              {task.options.map((o) => (
+                <button
+                  key={o}
+                  className={
+                    !answered
+                      ? 'option'
+                      : o === task.answer
+                        ? 'option option-correct'
+                        : o === picked
+                          ? 'option option-wrong'
+                          : 'option option-dim'
+                  }
+                  disabled={answered}
+                  onClick={() => pickOption(o)}
+                >
+                  {o}
+                </button>
+              ))}
             </div>
-            {!answered && (
-              <button className="primary-btn" disabled={!choice.g || !choice.c || !choice.n} onClick={checkIdentifyChoice}>
-                Проверить
+          )}
+
+          <div className="spell-row">
+            {answered && !result && (
+              <button className="primary-btn" onClick={() => advance(state)}>
+                Дальше
               </button>
             )}
-          </>
-        )}
-
-        {task.kind === 'transform' && (
-          <div className="options">
-            {task.options.map((o) => (
-              <button
-                key={o}
-                className={
-                  !answered
-                    ? 'option'
-                    : o === task.answer
-                      ? 'option option-correct'
-                      : o === picked
-                        ? 'option option-wrong'
-                        : 'option option-dim'
-                }
-                disabled={answered}
-                onClick={() => pickOption(o)}
-              >
-                {o}
-              </button>
-            ))}
           </div>
-        )}
-
-        <div className="spell-row">
-          {speechAvailable && (
-            <button className="secondary-btn" onClick={() => speak(task.kind === 'identify' ? task.shown : task.source)}>
-              🔊 Послушать
-            </button>
-          )}
-          {answered && !result && (
-            <button className="primary-btn" onClick={() => advance(state)}>
-              Дальше
-            </button>
-          )}
         </div>
       </div>
 

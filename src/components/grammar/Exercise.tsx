@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { GrammarQuestion } from '../../types/grammar'
 import { shuffle } from '../../logic/options'
 
@@ -26,45 +26,62 @@ export function Exercise({ question, attempt, remaining, feedback, onSelect, onN
     [question.id, attempt],
   )
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.target instanceof HTMLInputElement) return
+      if (feedback) {
+        if (!feedback.correct && e.key === 'Enter') onNext()
+        return
+      }
+      const n = Number(e.key)
+      if (Number.isInteger(n) && n >= 1 && n <= order.length) onSelect(order[n - 1])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [feedback, order, onSelect, onNext])
+
+  const promptClass = !feedback ? 'trainer-prompt' : feedback.correct ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad'
+
   return (
-    <>
-      <div className="exercise-top">
-        <button className="link-btn" onClick={onExit}>
-          ← Выйти
-        </button>
-        <span className="exercise-left">Осталось {remaining}</span>
-        <button className="link-btn" onClick={onShowRule}>
-          Правило
-        </button>
-      </div>
-      <main className="prompt">
-        <div key={`${question.id}-${attempt}`} className="exercise-prompt">
-          {question.prompt}
+    <main className="nouns trainer">
+      <div className="trainer-card">
+        <div className="exercise-top">
+          <button className="link-btn" onClick={onExit}>
+            ← Выйти
+          </button>
+          <span className="exercise-left">Осталось {remaining}</span>
+          <button className="link-btn" onClick={onShowRule}>
+            Правило
+          </button>
         </div>
-      </main>
-      <section className="options">
-        {order.map((i) => {
-          let cls = 'option option-small'
-          if (feedback) {
-            if (i === question.answer) cls += ' option-correct'
-            else if (i === feedback.chosen) cls += ' option-wrong'
-            else cls += ' option-dim'
-          }
-          return (
-            <button key={i} className={cls} disabled={feedback !== null} onClick={() => onSelect(i)}>
-              {question.options[i]}
+        <div key={`${question.id}-${attempt}-${feedback ? (feedback.correct ? 'ok' : 'bad') : ''}`} className={promptClass}>
+          <div className="exercise-prompt">{question.prompt}</div>
+          {feedback && !feedback.correct && <div className="explain-box-text">{question.explain}</div>}
+        </div>
+        <div className="trainer-answers">
+          <section className="options">
+            {order.map((i, n) => {
+              let cls = 'option option-small'
+              if (feedback) {
+                if (i === question.answer) cls += ' option-correct'
+                else if (i === feedback.chosen) cls += ' option-wrong'
+                else cls += ' option-dim'
+              }
+              return (
+                <button key={i} className={cls} disabled={feedback !== null} onClick={() => onSelect(i)}>
+                  <span className="option-key">{n + 1}</span>
+                  <span className="option-text">{question.options[i]}</span>
+                </button>
+              )
+            })}
+          </section>
+          {feedback && !feedback.correct && (
+            <button className="primary-btn trainer-next" onClick={onNext}>
+              Дальше <span className="option-key option-key-light">Enter</span>
             </button>
-          )
-        })}
-        {feedback && !feedback.correct && (
-          <div className="explain-box">
-            <div className="explain-box-text">{question.explain}</div>
-            <button className="primary-btn" onClick={onNext}>
-              Дальше
-            </button>
-          </div>
-        )}
-      </section>
-    </>
+          )}
+        </div>
+      </div>
+    </main>
   )
 }
