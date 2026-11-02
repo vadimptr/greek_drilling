@@ -1073,6 +1073,7 @@
     row-gap: 0;
     padding: 0 24px 0 0;
   }
+  .screen { grid-area: screen; padding: 24px 4px 24px; }
   .tabbar, .header { background: var(--card); border-right: 1px solid var(--border); }
   .tabbar {
     grid-area: nav;
