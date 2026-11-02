@@ -17,7 +17,7 @@ interface Props {
 export function Options({ options, targetId, direction, feedback, onSelect }: Props) {
   return (
     <section className="options">
-      {options.map((o) => {
+      {options.map((o, i) => {
         let cls = 'option'
         if (feedback) {
           if (o.id === targetId) cls += ' option-correct'
@@ -26,7 +26,8 @@ export function Options({ options, targetId, direction, feedback, onSelect }: Pr
         }
         return (
           <button key={o.id} className={cls} disabled={feedback !== null} onClick={() => onSelect(o)}>
-            {labelOf(o, direction)}
+            <span className="option-key">{i + 1}</span>
+            <span className="option-text">{labelOf(o, direction)}</span>
           </button>
         )
       })}

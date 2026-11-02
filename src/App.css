@@ -997,6 +997,9 @@
 
 /* trainer card */
 .trainer { justify-content: flex-start; padding: 8px 0 12px; }
+.screen > .trainer { flex: 1; }
+.trainer-prompt > .prompt { padding: 0; }
+.trainer-answers .options .option-text { overflow-wrap: anywhere; }
 .trainer-card {
   flex: 1;
   width: 100%;

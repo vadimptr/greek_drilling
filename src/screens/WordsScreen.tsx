@@ -109,31 +109,46 @@ export function WordsScreen({ state, onChange }: Props) {
     if (question) speak(question.word.el)
   }
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!question || infoOpen || e.metaKey || e.ctrlKey || e.altKey || e.target instanceof HTMLInputElement) return
+      const n = Number(e.key)
+      if (Number.isInteger(n) && n >= 1 && n <= question.options.length) answer(question.options[n - 1])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [question, infoOpen, answer])
+
   const won = isWin(state, pool)
 
   return (
     <>
       {question && (
-        <Prompt
-          word={question.word}
-          direction={state.direction}
-          canSpeak={speechAvailable}
-          onTapWord={() => {
-            interacted.current = true
-            setInfoOpen(true)
-          }}
-          onSpeak={speakCurrent}
-        />
-      )}
-
-      {question && (
-        <Options
-          options={question.options}
-          targetId={question.word.id}
-          direction={state.direction}
-          feedback={feedback}
-          onSelect={answer}
-        />
+        <div className="nouns trainer">
+          <div className="trainer-card">
+            <div className={feedback ? (feedback.correct ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad') : 'trainer-prompt'}>
+              <Prompt
+                word={question.word}
+                direction={state.direction}
+                canSpeak={speechAvailable}
+                onTapWord={() => {
+                  interacted.current = true
+                  setInfoOpen(true)
+                }}
+                onSpeak={speakCurrent}
+              />
+            </div>
+            <div className="trainer-answers">
+              <Options
+                options={question.options}
+                targetId={question.word.id}
+                direction={state.direction}
+                feedback={feedback}
+                onSelect={answer}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       <WordInfoPopup word={infoOpen && question ? question.word : null} onClose={() => setInfoOpen(false)} />
