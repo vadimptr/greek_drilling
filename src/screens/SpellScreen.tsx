@@ -94,7 +94,7 @@ export function SpellScreen({ state, words, onChange }: Props) {
   if (!task) return <main className="spell">{won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
 
   const tappable = task.kind !== 'missing' && !answer
-  const cardClass = answer ? (answer.correct ? 'spell-card spell-card-ok' : 'spell-card spell-card-bad') : 'spell-card'
+  const cardClass = answer ? (answer.correct ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad') : 'trainer-prompt'
 
   const tileClass = (i: number) => {
     const t = task.tokens[i]
@@ -139,7 +139,8 @@ export function SpellScreen({ state, words, onChange }: Props) {
   const sizeClass = longest >= 13 ? 'spell-words spell-words-xs' : longest >= 10 ? 'spell-words spell-words-s' : 'spell-words'
 
   return (
-    <main className="spell">
+    <main className="spell trainer">
+      <div className="trainer-card">
       <div key={`${task.word.id}-${task.kind}-${answer ? (answer.correct ? 'ok' : 'bad') : ''}`} className={cardClass}>
         <div className="spell-ru">{task.word.ru}</div>
         <div className={sizeClass}>
@@ -170,7 +171,7 @@ export function SpellScreen({ state, words, onChange }: Props) {
         </div>
       </div>
 
-      <div className="spell-bottom">
+      <div className="spell-bottom trainer-answers">
         {task.kind === 'missing' && !answer && (
           <div className="letter-options">
             {task.options!.map((o) => (
@@ -211,6 +212,7 @@ export function SpellScreen({ state, words, onChange }: Props) {
             </button>
           )}
         </div>
+      </div>
       </div>
 
       {won && !answer && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}

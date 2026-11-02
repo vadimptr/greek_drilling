@@ -999,6 +999,8 @@
 .trainer { justify-content: flex-start; padding: 8px 0 12px; }
 .screen > .trainer { flex: 1; }
 .trainer-prompt > .prompt { padding: 0; }
+.spell.trainer { gap: 0; }
+.trainer-answers .letter-options .option { padding-left: 12px; padding-right: 12px; }
 .trainer-answers .options .option-text { overflow-wrap: anywhere; }
 .trainer-card {
   flex: 1;
@@ -1088,7 +1090,7 @@
 @media (prefers-reduced-motion: reduce) { .drilly-figure, .drilly-confetti i { animation: none !important; } }
 
 @media (min-width: 960px) {
-  .header-row > .drilly { grid-area: dr; gap: 12px; padding: 4px 0 6px; min-height: 96px; }
+  .header-row > .drilly { display: none; grid-area: dr; gap: 12px; padding: 4px 0 6px; min-height: 96px; }
   .header-row > .drilly .drilly-figure { width: 124px; height: 124px; margin: -14px -10px -6px -14px; }
   .header-row > .drilly .drilly-bubble { position: relative; left: auto; top: auto; max-width: none; flex: 1; width: auto; }
   .header-row > .drilly .drilly-bubble::before { left: -6px; top: 50%; margin-top: -5px; border-top: none; border-bottom: 1px solid var(--border); }
@@ -1148,7 +1150,7 @@
     grid-area: header;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 42px;
-    grid-template-areas: 'dr dr dr dr' 's1 s1 s2 s2' 'pr pr pr pr' 'lb lb lb lb' 'us us us gear';
+    grid-template-areas: 's1 s1 s2 s2' 'pr pr pr pr' 'lb lb lb lb' 'us us us gear';
     gap: 8px;
     padding: 14px 14px 18px;
   }
