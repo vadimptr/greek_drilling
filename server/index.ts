@@ -22,8 +22,8 @@ const voiceConfig = env.ELEVENLABS_API_KEY
       apiKey: env.ELEVENLABS_API_KEY,
       voices: { el: parseVoices(env.ELEVENLABS_VOICES), en: parseVoices(env.ELEVENLABS_VOICES_EN), ru: parseVoices(env.ELEVENLABS_VOICES_RU) },
       speed: Number(env.ELEVENLABS_SPEED ?? 0.9),
-      sttModel: env.ELEVENLABS_STT_MODEL || 'scribe_v1',
-      ttsModel: env.ELEVENLABS_TTS_MODEL || 'eleven_flash_v2_5',
+      sttModel: env.ELEVENLABS_STT_MODEL || 'scribe_v2',
+      ttsModel: env.ELEVENLABS_TTS_MODEL || 'eleven_v4_turbo',
       fallbackVoice: env.ELEVENLABS_FALLBACK_VOICE || 'JBFqnCBsd6RMkjVDRZzb',
     }
   : null

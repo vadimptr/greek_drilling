@@ -23,8 +23,8 @@ services:
       CITY_PRICES: ${CITY_PRICES:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-      ELEVENLABS_STT_MODEL: ${ELEVENLABS_STT_MODEL:-scribe_v1}
-      ELEVENLABS_TTS_MODEL: ${ELEVENLABS_TTS_MODEL:-eleven_flash_v2_5}
+      ELEVENLABS_STT_MODEL: ${ELEVENLABS_STT_MODEL:-scribe_v2}
+      ELEVENLABS_TTS_MODEL: ${ELEVENLABS_TTS_MODEL:-eleven_v4_turbo}
       ELEVENLABS_VOICES: ${ELEVENLABS_VOICES:-}
       ELEVENLABS_VOICES_EN: ${ELEVENLABS_VOICES_EN:-male-young=Sq93GQT4X1lKDXsQcixO,male-middle=Fahco4VZzobUeiPqni1S,male-old=0lp4RIz96WD1RUtvEu3Q,female-young=lcMyyd2HUfFzxdCaC4Ta,female-middle=exsUS4vynmxd379XN4yO,female-old=kkPJzQOWz2Oz9cUaEaQd}
       ELEVENLABS_VOICES_RU: ${ELEVENLABS_VOICES_RU:-male-young=izZy1DKVkUJebQ8QmSqr,male-middle=rQOBu7YxCDxGiFdTm28w,male-old=LTkx8oHrUXaND7aaxdTA,female-young=Jbte7ht1CqapnZvc4KpK,female-middle=0ArNnoIAWKlT4WweaVMY,female-old=ZgfahluxUmUzBjjL81NN}
