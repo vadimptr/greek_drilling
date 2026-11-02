@@ -11,8 +11,10 @@ const OUTFIT_POSES: Record<DrillyOutfit, DrillyEmotion[]> = {
   master: ['idle'],
 }
 
+const FILES = import.meta.glob('../assets/drilly/*/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+
 export function drillyImage(outfit: DrillyOutfit, emotion: DrillyEmotion): string {
-  return `/drilly/${OUTFIT_POSES[outfit].includes(emotion) ? outfit : 'base'}/${emotion}.png`
+  return FILES[`../assets/drilly/${OUTFIT_POSES[outfit].includes(emotion) ? outfit : 'base'}/${emotion}.png`]
 }
 
 export function outfitForLevel(level: string): DrillyOutfit {

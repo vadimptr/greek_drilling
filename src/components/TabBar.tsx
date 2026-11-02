@@ -1,6 +1,7 @@
 import { tabsFor, type Tab } from '../logic/appState'
 import { CITY_NAMES, type Lang } from '../logic/city/name'
 import { useT, type UiKey } from '../logic/i18n'
+import brand from '../assets/brand.png'
 
 interface Props {
   tab: Tab
@@ -16,7 +17,7 @@ export function TabBar({ tab, learn, onChange }: Props) {
   return (
     <nav className="tabbar" aria-label={t('tab.aria')}>
       <div className="brand" aria-hidden="true">
-        <img className="brand-logo" src="/icons/icon-192.png" alt="" draggable={false} />
+        <img className="brand-logo" src={brand} alt="" draggable={false} />
         <span className="brand-name">Language Drilling</span>
       </div>
       {tabsFor(learn).map((id) => (

@@ -22,7 +22,7 @@ describe('drilly', () => {
   it('wears the outfit of the level and falls back to the base pose for emotions the outfit has no picture for', () => {
     expect(outfitForLevel('A1')).toBe('base')
     expect(outfitForLevel('B1')).toBe('b1')
-    expect(drillyImage('b1', 'idle')).toBe('/drilly/b1/idle.png')
-    expect(drillyImage('b1', 'happy')).toBe('/drilly/base/happy.png')
+    expect(drillyImage('b1', 'idle')).toMatch(/drilly\/b1\/idle/)
+    expect(drillyImage('b1', 'happy')).toMatch(/drilly\/base\/happy/)
   })
 })
