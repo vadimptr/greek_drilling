@@ -284,8 +284,8 @@ function Trainer({ state, onChange }: Props) {
 
   keyChoose.current = choose
   const summary: { label: string; ok: boolean | undefined; value: string }[] = [
-    { label: 'Перевод', ok: results.ru, value: `${task.verb.present} — ${task.verb.ru}` },
-    { label: 'Группа', ok: results.group, value: groupTitle(task.verb.group) },
+    { label: 'Перевод', ok: results.ru, value: done ? `${task.verb.present} — ${task.verb.ru}` : task.verb.ru },
+    { label: 'Группа', ok: results.group, value: done ? groupTitle(task.verb.group) : groupTitle(task.verb.group).split(' — ')[0] },
     { label: 'Лицо', ok: results.person, value: `${PRONOUNS[task.person]} · ${PRONOUN_RU[task.person]}` },
   ]
 
