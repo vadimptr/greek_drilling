@@ -370,12 +370,14 @@ test('google image provider decodes inline image data and reports quota errors',
 test('openai image provider asks for a landscape image and decodes b64', async () => {
   const { openAiImages } = await import('./images.ts')
   let sent = ''
-  const p = openAiImages('k', 'gpt-image-1', (async (_u: string, init: RequestInit) => {
+  const p = openAiImages('k', 'gpt-image-1-mini', 'low', (async (_u: string, init: RequestInit) => {
     sent = String(init.body)
     return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from('img').toString('base64') }] }))
   }) as typeof fetch)
   assert.equal((await p.generate('boat')).toString(), 'img')
   assert.match(sent, /"size":"1536x1024"/)
+  assert.match(sent, /"quality":"low"/)
+  assert.match(sent, /"model":"gpt-image-1-mini"/)
 })
 
 test('old games without Greek goal get it filled in once on load', async () => {

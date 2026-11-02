@@ -203,14 +203,14 @@ export function googleImages(apiKey: string, model: string, fetchImpl: typeof fe
   }
 }
 
-export function openAiImages(apiKey: string, model: string, fetchImpl: typeof fetch = fetch): ImageGenerator {
+export function openAiImages(apiKey: string, model: string, quality = 'low', fetchImpl: typeof fetch = fetch): ImageGenerator {
   return {
     id: 'openai',
     async generate(prompt) {
       const res = await fetchImpl('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, size: '1536x1024', quality: 'medium', output_format: 'webp', output_compression: 82, n: 1 }),
+        body: JSON.stringify({ model, prompt, size: '1536x1024', quality, output_format: 'webp', output_compression: 82, n: 1 }),
         signal: AbortSignal.timeout(180_000),
       })
       if (!res.ok) throw new ProviderError(`openai image: HTTP ${res.status} ${(await res.text().catch(() => '')).slice(0, 300)}`)

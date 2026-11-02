@@ -48,7 +48,7 @@ const city = {
 const dataDir = dirname(env.DB_PATH ?? 'data/gd.db')
 const images =
   env.CITY_IMAGES === 'openai' && env.OPENAI_API_KEY
-    ? openAiImages(env.OPENAI_API_KEY, env.CITY_IMAGE_MODEL || 'gpt-image-2')
+    ? openAiImages(env.OPENAI_API_KEY, env.CITY_IMAGE_MODEL || 'gpt-image-1-mini', env.CITY_IMAGE_QUALITY || 'low')
     : env.CITY_IMAGES === 'google' && env.GOOGLE_API_KEY
     ? googleImages(env.GOOGLE_API_KEY, env.CITY_IMAGE_MODEL || 'gemini-2.5-flash-image')
     : env.CITY_IMAGES === 'elevenlabs' && env.ELEVENLABS_API_KEY
