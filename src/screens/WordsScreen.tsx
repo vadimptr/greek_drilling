@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { drillyAnswer } from '../logic/drilly'
 import { wordPool } from '../data/levels'
 import { buildOptions } from '../logic/options'
 import { pickNext } from '../logic/pick'
@@ -84,6 +85,7 @@ export function WordsScreen({ state, onChange }: Props) {
       const correct = option.id === question.word.id
       const next = applyAnswer(state, question.word.id, correct)
       setFeedback({ chosenId: option.id, correct })
+      drillyAnswer(correct)
       onChange(next)
       if (next.autoSpeak && next.direction === 'ru-el') speak(question.word.el)
       timer.current = window.setTimeout(() => {

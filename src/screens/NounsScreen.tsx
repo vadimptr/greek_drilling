@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { drillyAnswer } from '../logic/drilly'
 import { NOUNS, type NounEntry } from '../data/nouns'
 import { WORDS } from '../data/words'
 import {
@@ -85,6 +86,7 @@ export function NounsScreen({ state, onChange }: Props) {
   const finish = (correct: boolean) => {
     if (!cur) return
     setResult(correct)
+    drillyAnswer(correct)
     const next = applyAnswer(state, cur.word.id, correct)
     onChange(next)
     if (correct) {

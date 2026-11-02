@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { drillyAnswer } from '../logic/drilly'
 import type { SpeakHint } from '../logic/appState'
 import { matchesWord } from '../logic/match'
 import { pickNext } from '../logic/pick'
@@ -91,6 +92,7 @@ export function SpeakScreen({ state, hint, words, onChange }: Props) {
         return
       }
       if (matchesWord(text, word)) {
+        drillyAnswer(true)
         const next = applyAnswer(state, word.id, true)
         onChange(next)
         setPhase('correct')
@@ -99,6 +101,7 @@ export function SpeakScreen({ state, hint, words, onChange }: Props) {
           advance(next)
         }, CORRECT_DELAY_MS)
       } else {
+        drillyAnswer(false)
         onChange(applyAnswer(state, word.id, false))
         setPhase('wrong')
         if (speechAvailable) speak(word.el)

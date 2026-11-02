@@ -1,4 +1,5 @@
 import { useT } from '../logic/i18n'
+import { Drilly } from './Drilly'
 
 export interface Stat {
   icon: string
@@ -25,14 +26,15 @@ export function Header({ left, right, subtitle, progress, onSettings, user, onAc
   return (
     <header className="header">
       <div className="header-row">
-        <div className="stat" aria-label={left.label}>
+        <Drilly />
+        <div className="stat stat-left" aria-label={left.label}>
           <span className="stat-icon">{left.icon}</span>
           <span key={left.bump ? String(left.value) : 'l'} className={left.bump ? 'stat-value score-bump' : 'stat-value'}>
             {left.value}
           </span>
           <span className="stat-label">{left.label}</span>
         </div>
-        <div className="stat" aria-label={right.label}>
+        <div className="stat stat-right" aria-label={right.label}>
           <span className="stat-icon">{right.icon}</span>
           <span className="stat-value">{right.value}</span>
           <span className="stat-label">{right.label}</span>

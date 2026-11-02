@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { drillyAnswer } from '../logic/drilly'
 import { pickNext } from '../logic/pick'
 import { canSpeak, speak } from '../logic/speech'
 import { checkSpell, initialSpellState, makeSpellTask, type SpellState, type SpellTask } from '../logic/spell'
@@ -70,6 +71,7 @@ export function SpellScreen({ state, words, onChange }: Props) {
     if (!task || answer) return
     const correct = checkSpell(task, a)
     setAnswer({ ...a, correct })
+    drillyAnswer(correct)
     const next = applyAnswer(state, task.word.id, correct)
     onChange(next)
     if (correct) {

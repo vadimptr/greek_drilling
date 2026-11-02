@@ -66,6 +66,8 @@ const UI = {
   'account.continue': { ru: 'Продолжить', en: 'Continue', el: 'Συνέχεια' },
   'account.skip': { ru: 'Без входа', en: 'Not now', el: 'Χωρίς σύνδεση' },
 
+  'drilly.milestone': { ru: '{n} упражнений! Так держать 🎉', en: '{n} exercises! Keep it up 🎉', el: '{n} ασκήσεις! Συνέχισε έτσι 🎉' },
+  'drilly.missed': { ru: 'Я скучал! Давно тебя не было', en: 'I missed you! It has been a while', el: 'Μου έλειψες! Πάει καιρός' },
   'city.offline': { ru: 'Нет связи с сервером', en: 'No connection to the server', el: 'Δεν υπάρχει σύνδεση με τον διακομιστή' },
   'city.updating': {
     ru: 'Сервер обновляется, попробуй ещё раз через минуту',

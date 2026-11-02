@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { drillyAnswer, drillyStep } from '../logic/drilly'
 import { createPortal } from 'react-dom'
 import { AORIST_GROUPS, PRONOUNS, PRONOUN_RU, type AoristGroup, type AoristVerb } from '../data/aorist'
 import { AORIST_THEORY } from '../data/aorist/theory'
@@ -268,6 +269,7 @@ function Trainer({ state, onChange }: Props) {
     setPicks(nextPicks)
     const last = stepIndex === STEPS.length - 1
     if (!last) {
+      drillyStep(o.right)
       timer.current = window.setTimeout(() => {
         timer.current = null
         setStepIndex((i) => i + 1)
@@ -275,6 +277,7 @@ function Trainer({ state, onChange }: Props) {
       return
     }
     const correct = nextPicks.ru === task.answer && nextPicks.group === task.verb.group && o.right
+    drillyAnswer(correct)
     const next = applyAnswer(state, task.verb.id, correct)
     onChange(next)
     setStepIndex(STEPS.length)
