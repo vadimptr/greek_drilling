@@ -199,6 +199,7 @@ function Trainer({ state, onChange }: Props) {
   const [picks, setPicks] = useState<Picks>({})
   const [stepIndex, setStepIndex] = useState(0)
   const timer = useRef<number | null>(null)
+  const keyChoose = useRef<((o: StepOption) => void) | null>(null)
 
   const clearTimer = () => {
     if (timer.current !== null) window.clearTimeout(timer.current)
@@ -226,6 +227,21 @@ function Trainer({ state, onChange }: Props) {
     onChange(next)
     advance(next)
   }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!task || e.metaKey || e.ctrlKey || e.altKey || e.target instanceof HTMLInputElement) return
+      if (stepIndex >= STEPS.length) {
+        if (e.key === 'Enter') advance(state)
+        return
+      }
+      const n = Number(e.key)
+      const list = stepOptions(STEPS[stepIndex].id, task)
+      if (Number.isInteger(n) && n >= 1 && n <= list.length) keyChoose.current?.(list[n - 1])
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [task, stepIndex, state, advance])
 
   const won = isWin(state, words)
   if (!task) return <main className="nouns">{won && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}</main>
@@ -266,7 +282,7 @@ function Trainer({ state, onChange }: Props) {
     }
   }
 
-  const cardClass = !done ? 'nouns-card' : allRight ? 'nouns-card spell-card-ok' : 'nouns-card spell-card-bad'
+  keyChoose.current = choose
   const summary: { label: string; ok: boolean | undefined; value: string }[] = [
     { label: 'Перевод', ok: results.ru, value: `${task.verb.present} — ${task.verb.ru}` },
     { label: 'Группа', ok: results.group, value: groupTitle(task.verb.group) },
@@ -274,67 +290,65 @@ function Trainer({ state, onChange }: Props) {
   ]
 
   return (
-    <main className="nouns">
-      <div key={`${task.verb.id}-${task.person}-${done ? (allRight ? 'ok' : 'bad') : ''}`} className={cardClass}>
-        <div className="aorist-steps">
-          {STEPS.map((s, i) => (
-            <span
-              key={s.id}
-              className={
-                results[s.id] === true
-                  ? 'aorist-step aorist-step-ok'
-                  : results[s.id] === false
-                    ? 'aorist-step aorist-step-bad'
-                    : i === stepIndex
-                      ? 'aorist-step aorist-step-active'
-                      : 'aorist-step'
-              }
-            >
-              {s.label}
-            </span>
-          ))}
-        </div>
-        <div className="nouns-form">{task.form}</div>
-        {!done && <div className="spell-ru">{step.question}</div>}
-        {summary.some((r) => r.ok !== undefined) && (
-          <ul className="aorist-summary">
-            {summary
-              .filter((r) => r.ok !== undefined)
-              .map((r) => (
-                <li key={r.label} className={r.ok ? 'aorist-summary-ok' : 'aorist-summary-bad'}>
-                  <span className="aorist-summary-mark">{r.ok ? '✓' : '✗'}</span>
-                  {r.value}
-                </li>
-              ))}
-          </ul>
-        )}
-        {done && <div className="aorist-paradigm">{paradigm(task.verb)}</div>}
-      </div>
+    <main className="nouns trainer">
+      <div className="trainer-card">
+        <ol className="stepper">
+          {STEPS.map((s, i) => {
+            const r = results[s.id]
+            const cls = r === true ? 'stepper-item stepper-ok' : r === false ? 'stepper-item stepper-bad' : i === stepIndex ? 'stepper-item stepper-active' : 'stepper-item'
+            return (
+              <li key={s.id} className={cls}>
+                <span className="stepper-dot">{r === true ? '✓' : r === false ? '✗' : i + 1}</span>
+                <span className="stepper-label">{s.label}</span>
+              </li>
+            )
+          })}
+        </ol>
 
-      <div className="spell-bottom">
-        {!done && (
-          <div className={step.id === 'group' ? 'options options-groups' : 'options options-6'}>
-            {options.map((o) => (
-              <button
-                key={o.key}
-                className={
-                  !stepPicked ? 'option' : o.right ? 'option option-correct' : isPicked(o, picks) ? 'option option-wrong' : 'option option-dim'
-                }
-                disabled={stepPicked}
-                onClick={() => choose(o)}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {done && !allRight && (
-          <div className="spell-row">
-            <button className="primary-btn" onClick={() => advance(state)}>
-              Дальше
+        <div key={`${task.verb.id}-${task.person}-${done ? (allRight ? 'ok' : 'bad') : ''}`} className={done ? (allRight ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad') : 'trainer-prompt'}>
+          <button className="trainer-word" onClick={() => speechAvailable && speak(task.form)} disabled={!speechAvailable} title={speechAvailable ? 'Послушать' : undefined}>
+            {task.form}
+          </button>
+          {!done && <div className="trainer-question">{step.question}</div>}
+          {summary.some((r) => r.ok !== undefined) && (
+            <ul className="aorist-summary">
+              {summary
+                .filter((r) => r.ok !== undefined)
+                .map((r) => (
+                  <li key={r.label} className={r.ok ? 'aorist-summary-ok' : 'aorist-summary-bad'}>
+                    <span className="aorist-summary-mark">{r.ok ? '✓' : '✗'}</span>
+                    {r.value}
+                  </li>
+                ))}
+            </ul>
+          )}
+          {done && <div className="aorist-paradigm">{paradigm(task.verb)}</div>}
+        </div>
+
+        <div className="trainer-answers">
+          {!done && (
+            <div className={step.id === 'group' ? 'options options-groups' : 'options options-6'}>
+              {options.map((o, i) => (
+                <button
+                  key={o.key}
+                  className={
+                    !stepPicked ? 'option' : o.right ? 'option option-correct' : isPicked(o, picks) ? 'option option-wrong' : 'option option-dim'
+                  }
+                  disabled={stepPicked}
+                  onClick={() => choose(o)}
+                >
+                  <span className="option-key">{i + 1}</span>
+                  <span className="option-text">{o.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {done && !allRight && (
+            <button className="primary-btn trainer-next" onClick={() => advance(state)}>
+              Дальше <span className="option-key option-key-light">Enter</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {won && !done && stepIndex === 0 && !stepPicked && <WinOverlay total={words.length} bestStreak={state.bestStreak} onRestart={restart} />}

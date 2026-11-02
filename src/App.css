@@ -983,7 +983,75 @@
 .verb-examples li { display: flex; flex-direction: column; gap: 2px; }
 .verb-example-el { font-size: 15px; }
 
+
+/* trainer card */
+.trainer { justify-content: flex-start; padding: 8px 0 12px; }
+.trainer-card {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 18px 14px 14px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 24px rgb(0 0 0 / 5%);
+}
+.stepper { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; gap: 8px; }
+.stepper-item { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.stepper-item + .stepper-item::before { content: ''; width: 22px; height: 2px; border-radius: 1px; background: var(--border); margin-right: 2px; }
+.stepper-dot {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--border); font-size: 12px; font-weight: 700; color: var(--muted);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.stepper-active { color: var(--text); }
+.stepper-active .stepper-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stepper-ok .stepper-dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.stepper-bad .stepper-dot { background: var(--bad); border-color: var(--bad); color: #fff; }
+.stepper-ok + .stepper-item::before, .stepper-bad + .stepper-item::before { background: color-mix(in srgb, var(--muted) 50%, transparent); }
+.trainer-prompt {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  text-align: center; padding: 18px 12px; border-radius: 18px;
+  animation: fade-in 0.25s ease;
+}
+.trainer-prompt-ok { background: color-mix(in srgb, var(--ok) 12%, transparent); animation: pulse 0.45s ease; }
+.trainer-prompt-bad { background: color-mix(in srgb, var(--bad) 10%, transparent); animation: shake 0.45s ease; }
+.trainer-word {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-size: clamp(34px, 9vw, 54px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.1; overflow-wrap: anywhere;
+}
+.trainer-word:disabled { cursor: default; }
+.trainer-question { font-size: 17px; color: var(--muted); }
+.trainer-prompt .aorist-summary { align-self: center; }
+.trainer-answers { display: flex; flex-direction: column; gap: 10px; }
+.trainer-answers .option { position: relative; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.option-key { display: none; }
+.trainer-next { width: 100%; min-height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.aorist-views { background: color-mix(in srgb, var(--text) 6%, transparent); padding: 4px; border-radius: 12px; gap: 4px; }
+.aorist-views .seg { color: var(--muted); font-weight: 600; cursor: pointer; }
+.aorist-views .seg-active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+
 @media (min-width: 960px) {
+  .trainer { justify-content: center; }
+  .trainer-card { flex: none; padding: 26px 32px 28px; gap: 22px; }
+  .trainer-prompt { flex: none; padding: 28px 16px; }
+  .trainer-answers .option { padding-left: 44px; padding-right: 44px; }
+  .trainer-answers .option:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+  .option-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    min-width: 22px; height: 22px; padding: 0 5px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--muted); font-size: 12px; font-weight: 600;
+  }
+  .option-correct .option-key, .option-wrong .option-key, .option-key-light { border-color: rgb(255 255 255 / 45%); color: rgb(255 255 255 / 85%); }
+  .trainer-next .option-key { position: static; transform: none; }
+  .grammar-hub:not(:has(.lesson-list)) > .sub-picker { margin-left: max(0px, calc((100% - 760px) / 2)); }
+
   .app {
     max-width: none;
     grid-template-columns: 220px minmax(0, 1fr);
