@@ -340,7 +340,7 @@ function Trainer({ state, onChange }: Props) {
 
         <div className="trainer-answers">
           {!done && (
-            <div className={step.id === 'group' ? 'options options-groups' : 'options options-6'}>
+            <div className={step.id === 'group' ? 'options options-groups' : step.id === 'ru' ? 'options options-4' : 'options options-6'}>
               {options.map((o, i) => (
                 <button
                   key={o.key}

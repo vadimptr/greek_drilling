@@ -941,8 +941,8 @@
 .aorist-summary-bad .aorist-summary-mark { color: var(--bad); }
 .options-groups { grid-template-columns: 1fr; gap: 8px; }
 .options-groups .option { min-height: 48px; padding: 8px 12px; font-size: 16px; }
-.options-6 { grid-template-columns: 1fr 1fr; gap: 8px; }
-.options-6 .option { min-height: 54px; padding: 8px 10px; font-size: 16px; line-height: 1.2; }
+.options-4, .options-6 { grid-template-columns: 1fr 1fr; gap: 8px; }
+.options-4 .option, .options-6 .option { min-height: 54px; padding: 8px 10px; font-size: 16px; line-height: 1.2; }
 .verb-examples { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
 .verb-examples li { display: flex; flex-direction: column; gap: 2px; }
 .verb-example-el { font-size: 15px; }

@@ -2,7 +2,7 @@ import { AORIST_SENTENCES, AORIST_VERBS, PRONOUNS, type AoristGroup, type Aorist
 import type { Word } from '../types/word'
 import type { Rng } from './pick'
 
-export const OPTION_COUNT = 6
+export const OPTION_COUNT = 4
 
 export type GroupFilter = AoristGroup | 'all'
 
