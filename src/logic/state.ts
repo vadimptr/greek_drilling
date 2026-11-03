@@ -1,6 +1,8 @@
 import type { Direction, Level, Word } from '../types/word'
+import type { Rng } from './pick'
 
-export const WEAK_REPEATS = 3
+export const WEAK_GAP_MIN = 3
+export const WEAK_GAP_MAX = 5
 
 /** Прогресс по словам — общая часть разделов «Слова» и «Речь». */
 export interface Progress {
@@ -25,28 +27,32 @@ function addUnique(ids: number[], id: number): number[] {
   return ids.includes(id) ? ids : [...ids, id]
 }
 
-export function applyAnswer<S extends Progress>(state: S, wordId: number, correct: boolean): S {
-  const weak = { ...state.weak }
+export function weakGap(rng: Rng = Math.random): number {
+  return WEAK_GAP_MIN + Math.floor(rng() * (WEAK_GAP_MAX - WEAK_GAP_MIN + 1))
+}
+
+export function tickWeak(weak: Record<number, number>, exceptId: number): Record<number, number> {
+  const next: Record<number, number> = {}
+  for (const [k, v] of Object.entries(weak)) {
+    const id = Number(k)
+    next[id] = id === exceptId ? v : Math.max(0, v - 1)
+  }
+  return next
+}
+
+export function applyAnswer<S extends Progress>(state: S, wordId: number, correct: boolean, rng: Rng = Math.random): S {
+  const weak = tickWeak(state.weak, wordId)
   let learned = state.learned
 
   if (!correct) {
-    weak[wordId] = WEAK_REPEATS
+    weak[wordId] = weakGap(rng)
     learned = learned.filter((id) => id !== wordId)
     return { ...state, weak, learned, score: 0, lastId: wordId }
   }
 
   const score = state.score + 1
-  if (wordId in weak) {
-    const left = weak[wordId] - 1
-    if (left <= 0) {
-      delete weak[wordId]
-      learned = addUnique(learned, wordId)
-    } else {
-      weak[wordId] = left
-    }
-  } else {
-    learned = addUnique(learned, wordId)
-  }
+  delete weak[wordId]
+  learned = addUnique(learned, wordId)
 
   return {
     ...state,

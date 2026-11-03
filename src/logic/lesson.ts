@@ -1,6 +1,7 @@
 import type { GrammarState, Lesson } from '../types/grammar'
 import { shuffle } from './options'
 import type { Rng } from './pick'
+import { weakGap } from './state'
 
 export function initialGrammarState(): GrammarState {
   return { completed: [], score: 0, bestStreak: 0, active: null }
@@ -18,16 +19,17 @@ export function currentQuestionId(state: GrammarState): string | null {
 }
 
 /**
- * Верный ответ убирает вопрос из очереди; неверный переносит его в конец.
+ * Верный ответ убирает вопрос из очереди; неверный возвращает его через 3–5 вопросов.
  * Когда очередь пуста, урок попадает в completed, active сбрасывается.
  */
-export function answerLesson(state: GrammarState, correct: boolean): GrammarState {
+export function answerLesson(state: GrammarState, correct: boolean, rng: Rng = Math.random): GrammarState {
   if (!state.active || state.active.queue.length === 0) return state
   const { lessonId, queue } = state.active
   const [head, ...rest] = queue
 
   if (!correct) {
-    return { ...state, score: 0, active: { lessonId, queue: [...rest, head] } }
+    const at = Math.min(rest.length, weakGap(rng))
+    return { ...state, score: 0, active: { lessonId, queue: [...rest.slice(0, at), head, ...rest.slice(at)] } }
   }
 
   const score = state.score + 1

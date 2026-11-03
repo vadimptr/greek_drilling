@@ -1,8 +1,7 @@
 import type { Word } from '../types/word'
 import type { Progress } from './state'
 
-/** Вероятность взять слово из слабого списка, если есть и слабые, и новые. */
-export const WEAK_PROBABILITY = 0.7
+export const DUE_PROBABILITY = 0.8
 
 export type Rng = () => number
 
@@ -12,22 +11,17 @@ export function pickNext(state: Progress, words: Word[], rng: Rng = Math.random)
 
   const fresh = words.filter((w) => !learned.has(w.id) && !weakSet.has(w.id))
   const weak = words.filter((w) => weakSet.has(w.id))
+  const due = weak.filter((w) => state.weak[w.id] <= 0)
+  const waiting = weak.filter((w) => state.weak[w.id] > 0)
+  const soonest = Math.min(...waiting.map((w) => state.weak[w.id]))
+  const next = waiting.filter((w) => state.weak[w.id] === soonest)
 
-  if (fresh.length === 0 && weak.length === 0) return null
+  const dueFirst = due.length > 0 && (fresh.length === 0 || rng() < DUE_PROBABILITY)
+  const pools = dueFirst ? [due, fresh, next] : [fresh, due, next]
 
-  let useWeak: boolean
-  if (weak.length === 0) useWeak = false
-  else if (fresh.length === 0) useWeak = true
-  else useWeak = rng() < WEAK_PROBABILITY
-
-  let pool = useWeak ? weak : fresh
-  const other = useWeak ? fresh : weak
-  if (pool.length === 1 && pool[0].id === state.lastId && other.length > 0) {
-    pool = other
+  for (const pool of pools) {
+    const options = pool.filter((w) => w.id !== state.lastId)
+    if (options.length > 0) return options[Math.floor(rng() * options.length)]
   }
-  if (pool.length > 1 && state.lastId !== null) {
-    pool = pool.filter((w) => w.id !== state.lastId)
-  }
-
-  return pool[Math.floor(rng() * pool.length)]
+  return words.find((w) => w.id === state.lastId && (weakSet.has(w.id) || !learned.has(w.id))) ?? null
 }

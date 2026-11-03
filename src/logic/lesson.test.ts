@@ -45,6 +45,12 @@ describe('lesson flow', () => {
     expect(s.active?.queue[1]).toBe(head)
   })
 
+  it('wrong answer in a long lesson comes back after 3–5 questions', () => {
+    const s = { ...initialGrammarState(), active: { lessonId: 1, queue: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] } }
+    expect(answerLesson(s, false, () => 0).active?.queue).toEqual(['b', 'c', 'd', 'a', 'e', 'f', 'g'])
+    expect(answerLesson(s, false, () => 0.999).active?.queue).toEqual(['b', 'c', 'd', 'e', 'f', 'a', 'g'])
+  })
+
   it('single remaining question stays after a wrong answer', () => {
     let s = startLesson(initialGrammarState(), lesson, identityRng)
     s = answerLesson(s, true)

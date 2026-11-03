@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Word } from '../types/word'
-import { WEAK_REPEATS, applyAnswer, initialState, isWin, restart } from './state'
+import { WEAK_GAP_MAX, WEAK_GAP_MIN, applyAnswer, initialState, isWin, restart, weakGap } from './state'
 
 const words: Word[] = [
   { id: 1, el: 'το σπίτι', ru: 'дом', pos: 'noun', topic: 'home' },
@@ -17,34 +17,44 @@ describe('applyAnswer', () => {
     expect(s.lastId).toBe(1)
   })
 
-  it('wrong: score reset, word goes to weak with 3, removed from learned', () => {
+  it('wrong: score reset, word waits 3–5 words, removed from learned', () => {
     let s = applyAnswer(initialState(), 1, true)
     s = applyAnswer(s, 2, true)
-    s = applyAnswer(s, 1, false)
+    s = applyAnswer(s, 1, false, () => 0)
     expect(s.score).toBe(0)
     expect(s.bestStreak).toBe(2)
-    expect(s.weak).toEqual({ 1: WEAK_REPEATS })
+    expect(s.weak).toEqual({ 1: WEAK_GAP_MIN })
     expect(s.learned).toEqual([2])
   })
 
-  it('weak word needs 3 correct answers, then becomes learned', () => {
-    let s = applyAnswer(initialState(), 1, false)
-    s = applyAnswer(s, 1, true)
+  it('gap is between 3 and 5 words', () => {
+    expect(weakGap(() => 0)).toBe(WEAK_GAP_MIN)
+    expect(weakGap(() => 0.999)).toBe(WEAK_GAP_MAX)
+  })
+
+  it('other answers count down the wait', () => {
+    let s = applyAnswer(initialState(), 1, false, () => 0)
+    s = applyAnswer(s, 2, true)
     expect(s.weak).toEqual({ 1: 2 })
-    s = applyAnswer(s, 1, true)
-    expect(s.weak).toEqual({ 1: 1 })
-    expect(s.learned).toEqual([])
+    s = applyAnswer(s, 3, false, () => 0)
+    expect(s.weak).toEqual({ 1: 1, 3: 3 })
+    s = applyAnswer(applyAnswer(s, 4, true), 5, true)
+    expect(s.weak).toEqual({ 1: 0, 3: 1 })
+  })
+
+  it('one correct answer returns a weak word to learned', () => {
+    let s = applyAnswer(initialState(), 1, false)
     s = applyAnswer(s, 1, true)
     expect(s.weak).toEqual({})
     expect(s.learned).toEqual([1])
-    expect(s.score).toBe(3)
+    expect(s.score).toBe(1)
   })
 
-  it('second mistake resets weak counter to 3', () => {
-    let s = applyAnswer(initialState(), 1, false)
-    s = applyAnswer(s, 1, true)
-    s = applyAnswer(s, 1, false)
-    expect(s.weak).toEqual({ 1: WEAK_REPEATS })
+  it('second mistake starts the wait again', () => {
+    let s = applyAnswer(initialState(), 1, false, () => 0)
+    s = applyAnswer(applyAnswer(applyAnswer(s, 2, true), 3, true), 4, true)
+    s = applyAnswer(s, 1, false, () => 0.999)
+    expect(s.weak).toEqual({ 1: WEAK_GAP_MAX })
   })
 
   it('does not duplicate learned ids', () => {

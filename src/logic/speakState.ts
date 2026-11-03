@@ -1,4 +1,4 @@
-import type { Progress } from './state'
+import { tickWeak, type Progress } from './state'
 
 /** Состояние раздела «Речь»: тот же прогресс по словам, что и в «Словах», но без настроек направления. */
 export type SpeakState = Progress
@@ -9,7 +9,7 @@ export function initialSpeakState(): SpeakState {
 
 /** Пропуск слова: без штрафа, только запоминаем, чтобы не выпало сразу снова. */
 export function skipWord(state: SpeakState, wordId: number): SpeakState {
-  return { ...state, lastId: wordId }
+  return { ...state, weak: tickWeak(state.weak, wordId), lastId: wordId }
 }
 
 export function restartSpeak(_state: SpeakState): SpeakState {
