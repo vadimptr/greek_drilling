@@ -314,9 +314,14 @@ function Trainer({ state, onChange }: Props) {
         </ol>
 
         <div key={`${task.verb.id}-${task.person}-${done ? (allRight ? 'ok' : 'bad') : ''}`} className={done ? (allRight ? 'trainer-prompt trainer-prompt-ok' : 'trainer-prompt trainer-prompt-bad') : 'trainer-prompt'}>
-          <button className="trainer-word" onClick={() => speechAvailable && speak(task.form)} disabled={!speechAvailable} title={speechAvailable ? 'Послушать' : undefined}>
-            {task.form}
-          </button>
+          <span className="prompt-anchor">
+            <span className="trainer-word">{task.form}</span>
+            {speechAvailable && (
+              <button className="speak-btn prompt-speak" onClick={() => speak(task.form)} aria-label="Послушать">
+                🔊
+              </button>
+            )}
+          </span>
           {!done && <div className="trainer-question">{step.question}</div>}
           {summary.some((r) => r.ok !== undefined) && (
             <ul className="aorist-summary">
