@@ -999,6 +999,7 @@
   font-size: clamp(34px, 9vw, 54px); font-weight: 800; letter-spacing: -0.01em; line-height: 1.1; overflow-wrap: anywhere;
 }
 .trainer-question { font-size: 17px; color: var(--muted); }
+.trainer-question-word { color: var(--text); font-weight: 700; }
 .trainer-prompt .aorist-summary { align-self: center; }
 .trainer-answers { display: flex; flex-direction: column; gap: 10px; }
 .trainer-answers .option { position: relative; display: flex; align-items: center; justify-content: center; font-weight: 600; }

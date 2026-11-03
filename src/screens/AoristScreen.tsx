@@ -292,7 +292,7 @@ function Trainer({ state, onChange }: Props) {
 
   keyChoose.current = choose
   const summary: { label: string; ok: boolean | undefined; value: string }[] = [
-    { label: 'Перевод', ok: results.ru, value: done ? `${task.verb.present} — ${task.verb.ru}` : task.verb.ru },
+    { label: 'Перевод', ok: results.ru, value: `${task.verb.present} — ${task.verb.ru}` },
     { label: 'Группа', ok: results.group, value: done ? groupTitle(task.verb.group) : groupTitle(task.verb.group).split(' — ')[0] },
     { label: 'Лицо', ok: results.person, value: `${PRONOUNS[task.person]} · ${PRONOUN_RU[task.person]}` },
   ]
@@ -322,7 +322,17 @@ function Trainer({ state, onChange }: Props) {
               </button>
             )}
           </span>
-          {!done && <div className="trainer-question">{step.question}</div>}
+          {!done && (
+            <div className="trainer-question">
+              {step.id === 'group' ? (
+                <>
+                  К какой группе относится <b className="trainer-question-word">{task.verb.present}</b>?
+                </>
+              ) : (
+                step.question
+              )}
+            </div>
+          )}
           {summary.some((r) => r.ok !== undefined) && (
             <ul className="aorist-summary">
               {summary
